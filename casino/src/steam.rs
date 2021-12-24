@@ -18,6 +18,8 @@ pub struct Unlock {
     pub key: Option<Item>,
     pub case: Item,
     pub item: Item,
+
+    pub at: DateTime<Utc>,
 }
 
 pub struct SteamCredentials {
@@ -239,13 +241,13 @@ impl SteamClient {
         let results = items
             .into_iter()
             .map(|i| {
-                dbg!("item", &i.item);
-
                 let case = i.case;
                 let key = i.key;
                 let item = data_map.get(&i.item).unwrap().into();
 
-                Unlock { key, case, item }
+                let at = i.at;
+
+                Unlock { key, case, item, at }
             })
             .collect();
 

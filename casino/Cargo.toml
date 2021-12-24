@@ -1,12 +1,12 @@
 [package]
-name = "collector"
+name = "casino"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-chrono = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
 reqwest = { version = "0.11.8", features = ["cookies", "json"] }
 lazy_static = "1.4"
 scraper = "0.12"

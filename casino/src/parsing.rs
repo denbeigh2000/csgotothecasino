@@ -92,12 +92,7 @@ pub fn parse_unhydrated_unlock(trade: ElementRef<'_>, since: &DateTime<Utc>) -> 
     let case_node = lost_items.next().unwrap();
     let key_node = lost_items.next();
 
-    dbg!("{:?}", &*case_node.value());
-    dbg!("{:?}", key_node.map(|n| &*n.value()));
-
     let gained_items = sides.next().unwrap();
-
-    dbg!("{:?}", &gained_items.value());
 
     let gained_item = gained_items.select(&TRADE_ITEM_SELECTOR).next().unwrap();
 
