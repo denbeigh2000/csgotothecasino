@@ -269,26 +269,30 @@ impl SteamClient {
                 acc
             });
 
-        let results = items
-            .into_iter()
-            .map(|i| {
-                let case = i.case;
-                let key = i.key;
-                let item = data_map.get(&i.item).unwrap().into();
+        unimplemented!()
+        // TODO: This doesn't need to get a full set of data anymore, just a
+        // market URL (and then it can be hydrated from csgofloat on the other
+        // end)
+        // let results = items
+        //     .into_iter()
+        //     .map(|i| {
+        //         let case = i.case;
+        //         let key = i.key;
+        //         let item = data_map.get(&i.item).unwrap().into();
 
-                let at = i.at;
-                let name = name.clone();
+        //         let at = i.at;
+        //         let name = name.clone();
 
-                Unlock {
-                    key,
-                    case,
-                    item,
-                    at,
-                    name,
-                }
-            })
-            .collect();
+        //         Unlock {
+        //             key,
+        //             case,
+        //             item,
+        //             at,
+        //             name,
+        //         }
+        //     })
+        //     .collect();
 
-        Ok(results)
+        // Ok(results)
     }
 }

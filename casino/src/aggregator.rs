@@ -1,16 +1,21 @@
 use std::convert::Infallible;
+use std::time::Duration;
 
 use bb8_redis::bb8::PooledConnection;
 use bb8_redis::RedisConnectionManager;
 use chrono::Utc;
+use futures_util::{SinkExt, StreamExt};
 use hyper::server::conn::AddrStream;
 use hyper::service::{make_service_fn, service_fn};
+use hyper::upgrade::Upgraded;
 use hyper::{Body, Method, Request, Response, StatusCode};
+use hyper_tungstenite::tungstenite::Message;
+use hyper_tungstenite::{is_upgrade_request, HyperWebsocket, WebSocketStream};
 use route_recognizer::Router;
 use tokio::sync::watch::{Receiver, Sender};
 
-use crate::steam::{ItemDescription, TrivialItem};
 use crate::steam::Unlock;
+use crate::steam::{ItemDescription, TrivialItem};
 
 lazy_static::lazy_static! {
     static ref ROUTER: Router<Route> = router();
@@ -162,5 +167,67 @@ async fn handle_state(req: Request<Body>) -> Result<Response<Body>, Infallible> 
 
 #[cfg(feature = "stub")]
 async fn handle_websocket(req: Request<Body>) -> Result<Response<Body>, Infallible> {
-    Ok(Response::builder().body(Body::empty()).unwrap())
+    if !is_upgrade_request(&req) {
+        return Ok(resp_400());
+    }
+
+    let (resp, socket) = hyper_tungstenite::upgrade(req, None).unwrap();
+    tokio::spawn(async move {
+        let mut ws = socket.await.unwrap();
+        let mut timer = tokio::time::interval(Duration::from_secs(30));
+        loop {
+            tokio::select! {
+                    msg = ws.next() => {
+                    let msg = match msg {
+                        Some(m) => m,
+                        None => return,
+                    };
+
+                    if handle_recv(msg.unwrap()).await.unwrap() {
+                        return;
+                    }
+                }
+                _ = timer.tick() => {
+                    send_unlock(&mut ws).await;
+                }
+            }
+        }
+    });
+
+    Ok(resp)
+}
+
+#[cfg(feature = "stub")]
+async fn send_unlock(socket: &mut WebSocketStream<Upgraded>) {
+    let unlock = Unlock {
+        key: Some(TrivialItem::new("Chroma Case Key".into(), None)),
+        case: TrivialItem::new("Chroma Case".into(), None),
+        item: STUB_ITEM.clone(),
+
+        at: Utc::now(),
+        name: "denbeigh".into(),
+    };
+
+    handle_emit(socket, unlock).await.unwrap();
+}
+
+async fn handle_recv(msg: Message) -> Result<bool, Infallible> {
+    Ok(match msg {
+        Message::Close(_) => {
+            eprintln!("received close, shutting down");
+            true
+        }
+        _ => false,
+    })
+}
+
+async fn handle_emit(
+    socket: &mut WebSocketStream<Upgraded>,
+    unlock: Unlock,
+) -> Result<(), Infallible> {
+    let encoded = serde_json::to_vec(&unlock).unwrap();
+    let msg = Message::Binary(encoded);
+    socket.send(msg).await.unwrap();
+
+    Ok(())
 }
