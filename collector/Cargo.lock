@@ -77,6 +77,8 @@ dependencies = [
  "lazy_static",
  "reqwest",
  "scraper",
+ "serde",
+ "serde_json",
  "tokio",
 ]
 
