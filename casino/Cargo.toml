@@ -5,6 +5,10 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[[bin]]
+name = "aggregator"
+path = "src/bin/aggregator.rs"
+
 [dependencies]
 bb8-redis = "0.10"
 chrono = { version = "0.4", features = ["serde"] }
