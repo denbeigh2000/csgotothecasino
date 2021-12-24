@@ -2,10 +2,9 @@ use std::collections::HashMap;
 use std::convert::Infallible;
 use std::sync::Arc;
 
-use crate::parsing::InventoryId;
-use crate::parsing::ParseResult;
-use crate::parsing::UnhydratedUnlock;
-use crate::parsing::{parse_unhydrated_unlock, TRADE_SELECTOR};
+use crate::parsing::{
+    parse_unhydrated_unlock, InventoryId, Item, ParseResult, UnhydratedUnlock, TRADE_SELECTOR,
+};
 
 use chrono::{DateTime, Utc};
 use reqwest::cookie::Jar;
@@ -14,17 +13,11 @@ use scraper::Html;
 use serde::Deserialize;
 use serde::Serialize;
 
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Unlock {
     pub key: Option<Item>,
     pub case: Item,
     pub item: Item,
-}
-
-pub struct Item {
-    pub name: String,
-    pub id: InventoryId,
-    pub variant: String,
-    pub icon_url: String,
 }
 
 pub struct SteamCredentials {
@@ -33,6 +26,17 @@ pub struct SteamCredentials {
 }
 
 impl SteamCredentials {
+    pub fn new(session_id: String, login_token: String) -> Self {
+        Self {
+            session_id,
+            login_token,
+        }
+    }
+
+    pub fn into_string(self) -> String {
+        format!("sessionid={}; steamLoginSecure={}", self.session_id, self.login_token)
+    }
+
     pub fn into_jar(self) -> Jar {
         let jar = Jar::default();
         let url = "https://steamcommunity.com".parse().unwrap();
@@ -53,18 +57,29 @@ pub enum FetchNewItemsError {
     NoHistoryFound,
 }
 
+impl std::fmt::Debug for FetchNewItemsError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::TransportError(e) => write!(f, "HTTP error: {}", e),
+            Self::AuthenticationFailure => write!(f, "Authentication failure"),
+            Self::UnhandledStatusCode(code) => write!(f, "unhandled status code: {}", code),
+            Self::NoHistoryFound => write!(f, "failed to parse any history from steam site"),
+        }
+    }
+}
+
 impl From<reqwest::Error> for FetchNewItemsError {
     fn from(e: reqwest::Error) -> Self {
         Self::TransportError(e)
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct Inventory {
     descriptions: Vec<InventoryDescription>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct InventoryDescription {
     #[serde(rename(deserialize = "classid"))]
     class_id: String,
@@ -72,6 +87,7 @@ pub struct InventoryDescription {
     instance_id: String,
     #[serde(rename(deserialize = "icon_url_large"))]
     icon_url: String,
+    #[serde(rename(deserialize = "market_name"))]
     name: String,
     #[serde(rename = "type")]
     variant: String,
@@ -98,6 +114,7 @@ pub struct SteamClient {
 
     inventory_url: Url,
     inventory_history_url: Url,
+    cookie_str: String,
 }
 
 impl SteamClient {
@@ -107,9 +124,10 @@ impl SteamClient {
         creds: SteamCredentials,
     ) -> Result<Self, Infallible> {
         let http_client = Client::builder()
-            .cookie_provider(Arc::new(creds.into_jar()))
             .build()
             .unwrap();
+
+        let cookie_str = creds.into_string();
 
         let inventory_url = format!(
             "https://steamcommunity.com/inventory/{}/730/2?l=english&count=25",
@@ -131,18 +149,29 @@ impl SteamClient {
 
             inventory_url,
             inventory_history_url,
+            cookie_str,
         })
     }
 
     pub async fn fetch_new_items(
-        self,
+        &self,
+        since: &DateTime<Utc>,
+    ) -> Result<Vec<Unlock>, FetchNewItemsError> {
+        let unhydrated = self.fetch_new_unhydrated_items(since).await?;
+        Ok(self.hydrate_unlocks(unhydrated).await.unwrap())
+    }
+
+    pub async fn fetch_new_unhydrated_items(
+        &self,
         since: &DateTime<Utc>,
     ) -> Result<Vec<UnhydratedUnlock>, FetchNewItemsError> {
         let resp = self
             .http_client
             .get(self.inventory_history_url.clone())
+            .header("Cookie", &self.cookie_str)
             .send()
             .await?;
+
         let status = resp.status();
 
         match status {
@@ -207,13 +236,18 @@ impl SteamClient {
                 acc
             });
 
-        let results = items.into_iter().map(|i| {
-            let case = data_map.get(&i.case).unwrap().into();
-            let key = i.key.map(|k| data_map.get(&k).unwrap().into());
-            let item = data_map.get(&i.item).unwrap().into();
+        let results = items
+            .into_iter()
+            .map(|i| {
+                dbg!("item", &i.item);
 
-            Unlock { key, case, item }
-        }).collect();
+                let case = i.case;
+                let key = i.key;
+                let item = data_map.get(&i.item).unwrap().into();
+
+                Unlock { key, case, item }
+            })
+            .collect();
 
         Ok(results)
     }

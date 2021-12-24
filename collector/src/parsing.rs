@@ -1,23 +1,34 @@
-use chrono::{DateTime, Utc, NaiveDateTime, TimeZone};
+use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use scraper::{ElementRef, Selector};
+use serde::{Deserialize, Serialize};
 
 lazy_static::lazy_static! {
     pub static ref TRADE_SELECTOR: Selector = Selector::parse("div.tradehistoryrow").unwrap();
     pub static ref TRADE_DATE_SELECTOR: Selector = Selector::parse("div.tradehistory_date").unwrap();
     pub static ref DESCRIPTION_SELECTOR: Selector = Selector::parse("div.tradehistory_event_description").unwrap();
     pub static ref INFO_SELECTOR: Selector = Selector::parse("div.tradehistory_items").unwrap();
-    pub static ref TRADE_ITEM_SELECTOR: Selector = Selector::parse("span.history_item").unwrap();
+    pub static ref TRADE_ITEM_SELECTOR: Selector = Selector::parse(".history_item").unwrap();
+    pub static ref TRADE_ITEM_IMG_SELECTOR: Selector = Selector::parse("img.tradehistory_received_item_img").unwrap();
+    pub static ref TRADE_ITEM_NAME_SELECTOR: Selector = Selector::parse("span.history_item_name").unwrap();
 }
 
-#[derive(Hash, PartialEq, Eq)]
+#[derive(Debug, Hash, PartialEq, Eq, Deserialize, Serialize)]
 pub struct InventoryId {
     pub class_id: u64,
     pub instance_id: u64,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Item {
+    pub name: String,
+    pub id: InventoryId,
+    pub variant: String,
+    pub icon_url: String,
+}
+
 pub struct UnhydratedUnlock {
-    pub case: InventoryId,
-    pub key: Option<InventoryId>,
+    pub case: Item,
+    pub key: Option<Item>,
     pub item: InventoryId,
 
     pub at: DateTime<Utc>,
@@ -81,20 +92,55 @@ pub fn parse_unhydrated_unlock(trade: ElementRef<'_>, since: &DateTime<Utc>) -> 
     let case_node = lost_items.next().unwrap();
     let key_node = lost_items.next();
 
-    let gained_item = sides
-        .next()
-        .unwrap()
-        .select(&TRADE_ITEM_SELECTOR)
-        .next()
-        .unwrap();
+    dbg!("{:?}", &*case_node.value());
+    dbg!("{:?}", key_node.map(|n| &*n.value()));
 
-    ParseResult::Success(UnhydratedUnlock{
-        case: inv_id_from_node(case_node),
-        key: key_node.map(inv_id_from_node),
+    let gained_items = sides.next().unwrap();
+
+    dbg!("{:?}", &gained_items.value());
+
+    let gained_item = gained_items.select(&TRADE_ITEM_SELECTOR).next().unwrap();
+
+    ParseResult::Success(UnhydratedUnlock {
+        case: item_from_node(case_node, "Case".into()),
+        key: key_node.map(|n| item_from_node(n, "Key".into())),
         item: inv_id_from_node(gained_item),
 
         at: datetime,
     })
+}
+
+fn item_from_node(r: ElementRef<'_>, variant: String) -> Item {
+    let name = r
+        .select(&TRADE_ITEM_NAME_SELECTOR)
+        .next()
+        .unwrap()
+        .text()
+        .next()
+        .unwrap()
+        .trim()
+        .to_string();
+
+    let icon_url = r
+        .select(&TRADE_ITEM_IMG_SELECTOR)
+        .next()
+        .unwrap()
+        .value()
+        .attr("src")
+        .unwrap()
+        .split('/')
+        .nth(5)
+        .unwrap()
+        .to_string();
+
+    let id = inv_id_from_node(r);
+
+    Item {
+        name,
+        id,
+        variant,
+        icon_url,
+    }
 }
 
 fn inv_id_from_node(r: ElementRef<'_>) -> InventoryId {
@@ -102,5 +148,8 @@ fn inv_id_from_node(r: ElementRef<'_>) -> InventoryId {
     let class_id = v.attr("data-classid").unwrap().parse().unwrap();
     let instance_id = v.attr("data-instanceid").unwrap().parse().unwrap();
 
-    InventoryId { class_id, instance_id }
+    InventoryId {
+        class_id,
+        instance_id,
+    }
 }
