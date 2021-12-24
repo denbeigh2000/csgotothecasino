@@ -5,7 +5,7 @@ use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_repr::Deserialize_repr;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Sticker {
     #[serde(rename(deserialize = "stickerId"))]
     sticker_id: u32,
@@ -20,7 +20,7 @@ struct FloatItemResponse {
     pub iteminfo: ItemDescription,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ItemDescription {
     origin: u32,
     quality: u32,

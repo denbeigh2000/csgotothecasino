@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::convert::Infallible;
-use std::sync::Arc;
 
+pub use crate::csgofloat::ItemDescription;
 use crate::parsing::{
     parse_unhydrated_unlock, InventoryId, Item, ParseResult, UnhydratedUnlock, TRADE_SELECTOR,
 };
@@ -14,10 +14,22 @@ use serde::Deserialize;
 use serde::Serialize;
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct TrivialItem {
+    name: String,
+    color: Option<String>,
+}
+
+impl TrivialItem {
+    pub fn new(name: String, color: Option<String>) -> Self {
+        Self { name, color }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Unlock {
-    pub key: Option<Item>,
-    pub case: Item,
-    pub item: Item,
+    pub key: Option<TrivialItem>,
+    pub case: TrivialItem,
+    pub item: ItemDescription,
 
     pub at: DateTime<Utc>,
     pub name: String,
@@ -82,6 +94,7 @@ impl From<reqwest::Error> for FetchNewItemsError {
 
 #[derive(Debug, Deserialize)]
 pub struct Inventory {
+    assets: Vec<Asset>,
     descriptions: Vec<InventoryDescription>,
 }
 
@@ -97,6 +110,18 @@ pub struct InventoryDescription {
     name: String,
     #[serde(rename = "type")]
     variant: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Asset {
+    #[serde(rename(deserialize = "appid"))]
+    app_id: u32,
+    #[serde(rename(deserialize = "assetid"))]
+    asset_id: String,
+    #[serde(rename(deserialize = "classid"))]
+    class_id: String,
+    #[serde(rename(deserialize = "instanceid"))]
+    instance_id: String,
 }
 
 impl Into<Item> for &InventoryDescription {
