@@ -5,6 +5,7 @@ use crate::steam::SteamClient;
 
 pub mod aggregator;
 mod parsing;
+mod csgofloat;
 mod steam;
 
 static COLLECTION_URL: &str = "https://";
