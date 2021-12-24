@@ -7,6 +7,7 @@ pub mod aggregator;
 mod parsing;
 mod csgofloat;
 mod steam;
+mod store;
 
 static COLLECTION_URL: &str = "https://";
 
