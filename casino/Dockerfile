@@ -6,7 +6,7 @@ WORKDIR /usr/src/casino
 COPY Cargo.lock Cargo.toml /usr/src/casino/
 COPY src /usr/src/casino/src
 
-RUN cargo build --bin aggregator --features stub
+RUN cargo build --bin aggregator
 
 FROM debian:buster-slim
 

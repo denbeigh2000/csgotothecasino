@@ -21,7 +21,7 @@ lazy_static::lazy_static! {
     static ref ROUTER: Router<Route> = router();
 }
 
-#[cfg(feature = "stub")]
+#[cfg(not(feature = "not-stub"))]
 lazy_static::lazy_static! {
     static ref STUB_ITEM: ItemDescription = serde_json::from_str(r##"{
     "origin": 8,
@@ -130,17 +130,17 @@ fn resp_400() -> Response<Body> {
     Response::builder().status(400).body(Body::empty()).unwrap()
 }
 
-#[cfg(not(feature = "stub"))]
+#[cfg(feature = "not-stub")]
 async fn handle_state(req: Request<Body>) -> Result<Response<Body>, Infallible> {
     Ok(Response::builder().body(Body::empty()).unwrap())
 }
 
-#[cfg(not(feature = "stub"))]
+#[cfg(feature = "not-stub")]
 async fn handle_websocket(req: Request<Body>) -> Result<Response<Body>, Infallible> {
     Ok(Response::builder().body(Body::empty()).unwrap())
 }
 
-#[cfg(feature = "stub")]
+#[cfg(not(feature = "not-stub"))]
 async fn handle_state(req: Request<Body>) -> Result<Response<Body>, Infallible> {
     if req.method() != Method::GET {
         return Ok(resp_400());
@@ -165,7 +165,7 @@ async fn handle_state(req: Request<Body>) -> Result<Response<Body>, Infallible> 
     Ok(resp)
 }
 
-#[cfg(feature = "stub")]
+#[cfg(not(feature = "not-stub"))]
 async fn handle_websocket(req: Request<Body>) -> Result<Response<Body>, Infallible> {
     if !is_upgrade_request(&req) {
         return Ok(resp_400());
@@ -197,7 +197,7 @@ async fn handle_websocket(req: Request<Body>) -> Result<Response<Body>, Infallib
     Ok(resp)
 }
 
-#[cfg(feature = "stub")]
+#[cfg(not(feature = "not-stub"))]
 async fn send_unlock(socket: &mut WebSocketStream<Upgraded>) {
     let unlock = Unlock {
         key: Some(TrivialItem::new("Chroma Case Key".into(), None)),
