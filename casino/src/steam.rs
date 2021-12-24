@@ -20,6 +20,7 @@ pub struct Unlock {
     pub item: Item,
 
     pub at: DateTime<Utc>,
+    pub name: String,
 }
 
 pub struct SteamCredentials {
@@ -36,7 +37,10 @@ impl SteamCredentials {
     }
 
     pub fn into_string(self) -> String {
-        format!("sessionid={}; steamLoginSecure={}", self.session_id, self.login_token)
+        format!(
+            "sessionid={}; steamLoginSecure={}",
+            self.session_id, self.login_token
+        )
     }
 
     pub fn into_jar(self) -> Jar {
@@ -125,9 +129,7 @@ impl SteamClient {
         user_id: u64,
         creds: SteamCredentials,
     ) -> Result<Self, Infallible> {
-        let http_client = Client::builder()
-            .build()
-            .unwrap();
+        let http_client = Client::builder().build().unwrap();
 
         let cookie_str = creds.into_string();
 
@@ -160,7 +162,10 @@ impl SteamClient {
         since: &DateTime<Utc>,
     ) -> Result<Vec<Unlock>, FetchNewItemsError> {
         let unhydrated = self.fetch_new_unhydrated_items(since).await?;
-        Ok(self.hydrate_unlocks(unhydrated).await.unwrap())
+        Ok(self
+            .hydrate_unlocks(unhydrated, self.username.clone())
+            .await
+            .unwrap())
     }
 
     pub async fn fetch_new_unhydrated_items(
@@ -214,6 +219,7 @@ impl SteamClient {
     pub async fn hydrate_unlocks(
         &self,
         items: Vec<UnhydratedUnlock>,
+        name: String,
     ) -> Result<Vec<Unlock>, Infallible> {
         let resp = self
             .http_client
@@ -246,8 +252,15 @@ impl SteamClient {
                 let item = data_map.get(&i.item).unwrap().into();
 
                 let at = i.at;
+                let name = name.clone();
 
-                Unlock { key, case, item, at }
+                Unlock {
+                    key,
+                    case,
+                    item,
+                    at,
+                    name,
+                }
             })
             .collect();
 

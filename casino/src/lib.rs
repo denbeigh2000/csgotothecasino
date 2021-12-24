@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use crate::parsing::InventoryId;
 use crate::steam::SteamClient;
 
+pub mod aggregator;
 mod parsing;
 mod steam;
 
