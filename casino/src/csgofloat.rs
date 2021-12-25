@@ -1,7 +1,7 @@
 use core::fmt;
 use std::{collections::HashMap, convert::Infallible, fmt::Display, sync::Arc};
 
-use bb8_redis::{bb8::Pool, RedisConnectionManager};
+use bb8_redis::{bb8::Pool, RedisConnectionManager, redis::{IntoConnectionInfo, RedisError}};
 use hyper::Body;
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
@@ -203,11 +203,16 @@ pub struct CsgoFloatClient {
 }
 
 impl CsgoFloatClient {
-    pub fn new(pool: Arc<Pool<RedisConnectionManager>>) -> Self {
+    pub async fn new<T: IntoConnectionInfo>(i: T) -> Result<Self, RedisError> {
+
+        let conn_info = i.into_connection_info()?;
+        let mgr = RedisConnectionManager::new(conn_info.clone())?;
+        let pool = Arc::new(bb8_redis::bb8::Pool::builder().build(mgr).await?);
+
         let cache = Cache::new(pool, "floatcache".to_string());
         let client = Client::new();
 
-        Self { cache, client }
+        Ok(Self { cache, client })
     }
 
     pub async fn get(&self, url: &str) -> Result<ItemDescription, Infallible> {

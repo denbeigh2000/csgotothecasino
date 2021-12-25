@@ -5,7 +5,6 @@ use futures_util::{Stream, SinkExt, StreamExt};
 use hyper::{Body, Method, Request, Response, StatusCode};
 use hyper_tungstenite::tungstenite::Message;
 use hyper_tungstenite::{is_upgrade_request, HyperWebsocket, WebSocketStream};
-use tokio::sync::watch::{self, Receiver, Sender};
 
 use crate::csgofloat::CsgoFloatClient;
 use crate::steam::{MarketPriceClient, UnhydratedUnlock, Unlock};
@@ -15,9 +14,6 @@ use super::http::resp_400;
 use super::websocket::{handle_emit, handle_recv};
 
 pub struct Handler {
-    events_rx: Receiver<Option<UnhydratedUnlock>>,
-    events_tx: Arc<Sender<Option<UnhydratedUnlock>>>,
-
     store: Store,
     csgofloat_client: CsgoFloatClient,
     market_price_client: MarketPriceClient,
@@ -33,11 +29,7 @@ impl Handler {
         csgofloat_client: CsgoFloatClient,
         market_price_client: MarketPriceClient,
     ) -> Self {
-        let (events_tx, events_rx) = watch::channel(None);
-        let events_tx = Arc::new(events_tx);
         Self {
-            events_rx,
-            events_tx,
             store,
             csgofloat_client,
             market_price_client,
@@ -46,9 +38,7 @@ impl Handler {
 
     pub async fn save(&self, items: &[UnhydratedUnlock]) -> Result<(), Infallible> {
         for item in items {
-            let item = item.clone();
-            self.store.append_entry(&item).await?;
-            self.events_tx.send(Some(item)).unwrap();
+            self.store.append_entry(item).await?;
         }
 
         Ok(())

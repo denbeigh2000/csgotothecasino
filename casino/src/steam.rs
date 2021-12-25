@@ -9,6 +9,7 @@ use crate::parsing::{parse_raw_unlock, InventoryId, Item, ParseResult, RawUnlock
 
 use bb8_redis::bb8::Pool;
 use bb8_redis::RedisConnectionManager;
+use bb8_redis::redis::{IntoConnectionInfo, RedisError};
 use chrono::{DateTime, Utc};
 use reqwest::cookie::Jar;
 use reqwest::{Client, StatusCode, Url};
@@ -379,10 +380,15 @@ pub struct MarketPriceClient {
 }
 
 impl MarketPriceClient {
-    pub fn new(pool: Arc<Pool<RedisConnectionManager>>) -> Self {
-        let cache = Cache::new(pool, "market".to_string());
+    pub async fn new<T: IntoConnectionInfo>(i: T) -> Result<Self, RedisError> {
+        let conn_info = i.into_connection_info()?;
+        let mgr = RedisConnectionManager::new(conn_info.clone())?;
+        let pool = Arc::new(bb8_redis::bb8::Pool::builder().build(mgr).await?);
         let client = Client::new();
-        Self { client, cache }
+
+        let cache = Cache::new(pool, "market".to_string());
+
+        Ok(Self { client, cache })
     }
 
     pub async fn get(&self, market_name: &str) -> Result<MarketPrices, Infallible> {
