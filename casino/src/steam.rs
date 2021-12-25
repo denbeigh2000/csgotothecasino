@@ -2,8 +2,9 @@ use std::collections::HashMap;
 use std::convert::Infallible;
 
 pub use crate::csgofloat::ItemDescription;
+pub use crate::parsing::TrivialItem;
 use crate::parsing::{
-    parse_unhydrated_unlock, InventoryId, Item, ParseResult, UnhydratedUnlock, TRADE_SELECTOR,
+    parse_raw_unlock, InventoryId, Item, ParseResult, RawUnlock, TRADE_SELECTOR,
 };
 
 use chrono::{DateTime, Utc};
@@ -14,15 +15,13 @@ use serde::Deserialize;
 use serde::Serialize;
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct TrivialItem {
-    name: String,
-    color: Option<String>,
-}
+pub struct UnhydratedUnlock {
+    pub key: Option<TrivialItem>,
+    pub case: TrivialItem,
+    pub item_market_link: String,
 
-impl TrivialItem {
-    pub fn new(name: String, color: Option<String>) -> Self {
-        Self { name, color }
-    }
+    pub at: DateTime<Utc>,
+    pub name: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -101,15 +100,17 @@ pub struct Inventory {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct InventoryDescription {
     #[serde(rename(deserialize = "classid"))]
-    class_id: String,
+    pub class_id: String,
     #[serde(rename(deserialize = "instanceid"))]
-    instance_id: String,
+    pub instance_id: String,
     #[serde(rename(deserialize = "icon_url_large"))]
-    icon_url: String,
+    pub icon_url: String,
     #[serde(rename(deserialize = "market_name"))]
-    name: String,
+    pub name: String,
     #[serde(rename = "type")]
-    variant: String,
+    pub variant: String,
+
+    pub actions: Vec<Action>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -117,11 +118,17 @@ pub struct Asset {
     #[serde(rename(deserialize = "appid"))]
     app_id: u32,
     #[serde(rename(deserialize = "assetid"))]
-    asset_id: String,
+    asset_id: u64,
     #[serde(rename(deserialize = "classid"))]
-    class_id: String,
+    class_id: u64,
     #[serde(rename(deserialize = "instanceid"))]
-    instance_id: String,
+    instance_id: u64,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Action {
+    link: String,
+    name: String,
 }
 
 impl Into<Item> for &InventoryDescription {
@@ -185,10 +192,10 @@ impl SteamClient {
     pub async fn fetch_new_items(
         &self,
         since: &DateTime<Utc>,
-    ) -> Result<Vec<Unlock>, FetchNewItemsError> {
+    ) -> Result<Vec<UnhydratedUnlock>, FetchNewItemsError> {
         let unhydrated = self.fetch_new_unhydrated_items(since).await?;
         Ok(self
-            .hydrate_unlocks(unhydrated, self.username.clone())
+            .prepare_unlocks(unhydrated, self.username.clone())
             .await
             .unwrap())
     }
@@ -196,7 +203,7 @@ impl SteamClient {
     pub async fn fetch_new_unhydrated_items(
         &self,
         since: &DateTime<Utc>,
-    ) -> Result<Vec<UnhydratedUnlock>, FetchNewItemsError> {
+    ) -> Result<Vec<RawUnlock>, FetchNewItemsError> {
         let resp = self
             .http_client
             .get(self.inventory_history_url.clone())
@@ -220,10 +227,10 @@ impl SteamClient {
         let trades = parsed_data.select(&TRADE_SELECTOR);
         let mut seen_any = false;
 
-        let mut unlocks: Vec<UnhydratedUnlock> = Vec::new();
+        let mut unlocks: Vec<RawUnlock> = Vec::new();
 
         for trade in trades {
-            match parse_unhydrated_unlock(trade, since) {
+            match parse_raw_unlock(trade, since) {
                 ParseResult::Success(v) => unlocks.push(v),
                 ParseResult::TooOld => return Ok(unlocks),
                 ParseResult::Unparseable => panic!("failed to parse html??"),
@@ -241,11 +248,11 @@ impl SteamClient {
         Ok(unlocks)
     }
 
-    pub async fn hydrate_unlocks(
+    pub async fn prepare_unlocks(
         &self,
-        items: Vec<UnhydratedUnlock>,
+        items: Vec<RawUnlock>,
         name: String,
-    ) -> Result<Vec<Unlock>, Infallible> {
+    ) -> Result<Vec<UnhydratedUnlock>, Infallible> {
         let resp = self
             .http_client
             .get(self.inventory_url.clone())
@@ -269,30 +276,53 @@ impl SteamClient {
                 acc
             });
 
-        unimplemented!()
-        // TODO: This doesn't need to get a full set of data anymore, just a
-        // market URL (and then it can be hydrated from csgofloat on the other
-        // end)
-        // let results = items
-        //     .into_iter()
-        //     .map(|i| {
-        //         let case = i.case;
-        //         let key = i.key;
-        //         let item = data_map.get(&i.item).unwrap().into();
+        let asset_map: HashMap<InventoryId, Asset> =
+            inv.assets
+                .into_iter()
+                .fold(HashMap::new(), |mut acc, item| {
+                    let id = InventoryId {
+                        class_id: item.class_id,
+                        instance_id: item.instance_id,
+                    };
 
-        //         let at = i.at;
-        //         let name = name.clone();
+                    acc.insert(id, item);
+                    acc
+                });
 
-        //         Unlock {
-        //             key,
-        //             case,
-        //             item,
-        //             at,
-        //             name,
-        //         }
-        //     })
-        //     .collect();
+        let results = items
+            .into_iter()
+            .map(|i| {
+                let case = i.case;
+                let key = i.key;
+                let item_data = data_map.get(&i.item).unwrap();
+                let item_asset = asset_map.get(&i.item).unwrap();
 
-        // Ok(results)
+                let link_tpl = item_data
+                    .actions
+                    .iter()
+                    .find(|a| {
+                        a.name.starts_with("Inspect") && a.link.starts_with("steam://rungame/730/")
+                    })
+                    .unwrap();
+
+                let item_market_link = link_tpl
+                    .link
+                    .replacen("%assetid%", &item_asset.asset_id.to_string(), 1)
+                    .replacen("%owner_steamid%", &self.user_id.to_string(), 1);
+
+                let at = i.at;
+                let name = name.clone();
+
+                UnhydratedUnlock {
+                    key,
+                    case,
+                    item_market_link,
+                    at,
+                    name,
+                }
+            })
+            .collect();
+
+        Ok(results)
     }
 }

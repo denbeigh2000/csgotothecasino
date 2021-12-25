@@ -14,8 +14,8 @@ use hyper_tungstenite::{is_upgrade_request, HyperWebsocket, WebSocketStream};
 use route_recognizer::Router;
 use tokio::sync::watch::{Receiver, Sender};
 
-use crate::steam::Unlock;
 use crate::steam::{ItemDescription, TrivialItem};
+use crate::steam::{UnhydratedUnlock, Unlock};
 
 lazy_static::lazy_static! {
     static ref ROUTER: Router<Route> = router();
@@ -79,6 +79,11 @@ lazy_static::lazy_static! {
   }"##).unwrap();
 }
 
+#[cfg(not(feature = "not-stub"))]
+static CLUTCH_CASE_IMG: &str = "https://community.cloudflare.steamstatic.com/economy/image/-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXU5A1PIYQNqhpOSV-fRPasw8rsUFJ5KBFZv668FFY5naqQIz4R7Yjix9bZkvKiZrmAzzlTu5AoibiT8d_x21Wy8hY_MWz1doSLMlhpM3FKbNs";
+#[cfg(not(feature = "not-stub"))]
+static CLUTCH_CASE_KEY_IMG: &str = "https://community.cloudflare.steamstatic.com/economy/image/-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXX7gNTPcUxuxpJSXPbQv2S1MDeXkh6LBBOiev8ZQQ30KubIWVDudrgkNncw6-hY-2Fkz1S7JRz2erHodnzig2xqUVvYDrtZNjCAC7WDrU";
+
 enum Route {
     State,
     Stream,
@@ -108,7 +113,7 @@ pub async fn serve() -> Result<(), Infallible> {
 }
 
 struct Handle<'a> {
-    events: Receiver<Unlock>,
+    events: Receiver<UnhydratedUnlock>,
     conn: PooledConnection<'a, RedisConnectionManager>,
 }
 
@@ -149,8 +154,8 @@ async fn handle_state(req: Request<Body>) -> Result<Response<Body>, Infallible> 
     let data = vec![Unlock {
         name: "denbeigh".into(),
         item: STUB_ITEM.clone(),
-        case: TrivialItem::new("Chroma Case".into(), None),
-        key: Some(TrivialItem::new("Chroma Case Key".into(), None)),
+        case: TrivialItem::new("Clutch Case".into(), CLUTCH_CASE_IMG.to_string(), None),
+        key: Some(TrivialItem::new("Clutch Case Key".into(), CLUTCH_CASE_KEY_IMG.to_string(), None)),
 
         at: Utc::now(),
     }];
@@ -200,8 +205,8 @@ async fn handle_websocket(req: Request<Body>) -> Result<Response<Body>, Infallib
 #[cfg(not(feature = "not-stub"))]
 async fn send_unlock(socket: &mut WebSocketStream<Upgraded>) {
     let unlock = Unlock {
-        key: Some(TrivialItem::new("Chroma Case Key".into(), None)),
-        case: TrivialItem::new("Chroma Case".into(), None),
+        key: Some(TrivialItem::new("Clutch Case Key".into(), CLUTCH_CASE_KEY_IMG.to_string(), None)),
+        case: TrivialItem::new("Clutch Case".into(), CLUTCH_CASE_IMG.to_string(), None),
         item: STUB_ITEM.clone(),
 
         at: Utc::now(),

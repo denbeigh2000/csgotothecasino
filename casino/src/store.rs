@@ -6,21 +6,21 @@ use bb8_redis::redis::{from_redis_value, AsyncCommands, FromRedisValue, ToRedisA
 use bb8_redis::RedisConnectionManager;
 use tokio::sync::watch::Sender;
 
-use crate::steam::Unlock;
+use crate::steam::UnhydratedUnlock;
 
 pub struct Store {
     pool: Arc<Pool<RedisConnectionManager>>,
-    writer: Sender<Unlock>,
+    writer: Sender<UnhydratedUnlock>,
 }
 
-impl FromRedisValue for Unlock {
+impl FromRedisValue for UnhydratedUnlock {
     fn from_redis_value(v: &bb8_redis::redis::Value) -> bb8_redis::redis::RedisResult<Self> {
         let data: Vec<u8> = from_redis_value(v)?;
         Ok(serde_json::from_slice(&data).unwrap())
     }
 }
 
-impl ToRedisArgs for Unlock {
+impl ToRedisArgs for UnhydratedUnlock {
     fn write_redis_args<W>(&self, out: &mut W)
     where
         W: ?Sized + bb8_redis::redis::RedisWrite,
@@ -40,14 +40,14 @@ impl Store {
         Ok(self.pool.get().await.unwrap())
     }
 
-    pub async fn get_entries(&self) -> Result<Vec<Unlock>, Infallible> {
+    pub async fn get_entries(&self) -> Result<Vec<UnhydratedUnlock>, Infallible> {
         let mut conn = self.get_conn().await?;
-        let res: Option<Vec<Unlock>> = conn.lrange("unlocks", 0, -1).await.unwrap();
+        let res: Option<Vec<UnhydratedUnlock>> = conn.lrange("unlocks", 0, -1).await.unwrap();
 
         Ok(res.unwrap_or_else(Vec::new))
     }
 
-    pub async fn append_entry(&self, entry: Unlock) -> Result<(), Infallible> {
+    pub async fn append_entry(&self, entry: UnhydratedUnlock) -> Result<(), Infallible> {
         let mut conn = self.get_conn().await?;
         let _res: () = conn.lpush("unlocks", &entry).await.unwrap();
 

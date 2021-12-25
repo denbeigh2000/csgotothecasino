@@ -12,6 +12,20 @@ lazy_static::lazy_static! {
     pub static ref TRADE_ITEM_NAME_SELECTOR: Selector = Selector::parse("span.history_item_name").unwrap();
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TrivialItem {
+    name: String,
+    color: Option<String>,
+    image_url: String,
+}
+
+impl TrivialItem {
+    pub fn new(name: String, image_url: String, color: Option<String>) -> Self {
+        Self { name, image_url, color }
+    }
+}
+
+
 #[derive(Debug, Hash, PartialEq, Eq, Deserialize, Serialize)]
 pub struct InventoryId {
     pub class_id: u64,
@@ -26,26 +40,22 @@ pub struct Item {
     pub icon_url: String,
 }
 
-pub struct UnhydratedUnlock {
-    pub case: Item,
-    pub key: Option<Item>,
+pub struct RawUnlock {
+    pub case: TrivialItem,
+    pub key: Option<TrivialItem>,
     pub item: InventoryId,
 
     pub at: DateTime<Utc>,
 }
 
-pub struct UnhydratedItem {
-    pub id: InventoryId,
-}
-
 pub enum ParseResult {
-    Success(UnhydratedUnlock),
+    Success(RawUnlock),
     TooOld,
     WrongTransactionType,
     Unparseable,
 }
 
-pub fn parse_unhydrated_unlock(trade: ElementRef<'_>, since: &DateTime<Utc>) -> ParseResult {
+pub fn parse_raw_unlock(trade: ElementRef<'_>, since: &DateTime<Utc>) -> ParseResult {
     let desc = match trade.select(&DESCRIPTION_SELECTOR).next() {
         Some(d) => d,
         // TODO: Should convey more info
@@ -96,7 +106,7 @@ pub fn parse_unhydrated_unlock(trade: ElementRef<'_>, since: &DateTime<Utc>) -> 
 
     let gained_item = gained_items.select(&TRADE_ITEM_SELECTOR).next().unwrap();
 
-    ParseResult::Success(UnhydratedUnlock {
+    ParseResult::Success(RawUnlock {
         case: item_from_node(case_node, "Case".into()),
         key: key_node.map(|n| item_from_node(n, "Key".into())),
         item: inv_id_from_node(gained_item),
@@ -105,7 +115,7 @@ pub fn parse_unhydrated_unlock(trade: ElementRef<'_>, since: &DateTime<Utc>) -> 
     })
 }
 
-fn item_from_node(r: ElementRef<'_>, variant: String) -> Item {
+fn item_from_node(r: ElementRef<'_>, variant: String) -> TrivialItem {
     let name = r
         .select(&TRADE_ITEM_NAME_SELECTOR)
         .next()
@@ -116,7 +126,7 @@ fn item_from_node(r: ElementRef<'_>, variant: String) -> Item {
         .trim()
         .to_string();
 
-    let icon_url = r
+    let image_id = r
         .select(&TRADE_ITEM_IMG_SELECTOR)
         .next()
         .unwrap()
@@ -125,16 +135,14 @@ fn item_from_node(r: ElementRef<'_>, variant: String) -> Item {
         .unwrap()
         .split('/')
         .nth(5)
-        .unwrap()
-        .to_string();
+        .unwrap();
 
-    let id = inv_id_from_node(r);
+    let image_url = format!("https://community.cloudflare.steamstatic.com/economy/image/{}", image_id);
 
-    Item {
+    TrivialItem {
         name,
-        id,
-        variant,
-        icon_url,
+        color: None,
+        image_url,
     }
 }
 
