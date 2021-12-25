@@ -223,9 +223,9 @@ impl CsgoFloatClient {
 
     pub async fn get_bulk(
         &self,
-        urls: Vec<&str>,
+        urls: &[&str],
     ) -> Result<HashMap<String, ItemDescription>, Infallible> {
-        let res = self.cache.get_bulk(&urls).await?;
+        let res = self.cache.get_bulk(urls).await?;
         let missing: Vec<&str> = urls
             .iter()
             .filter(|u| res.contains_key(**u))

@@ -12,7 +12,7 @@ lazy_static::lazy_static! {
     pub static ref TRADE_ITEM_NAME_SELECTOR: Selector = Selector::parse("span.history_item_name").unwrap();
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TrivialItem {
     name: String,
     color: Option<String>,

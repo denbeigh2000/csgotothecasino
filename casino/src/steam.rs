@@ -16,7 +16,7 @@ use scraper::Html;
 use serde::Deserialize;
 use serde::Serialize;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UnhydratedUnlock {
     pub key: Option<TrivialItem>,
     pub case: TrivialItem,

@@ -23,7 +23,7 @@ mod stub_handlers;
 #[cfg(not(feature = "not-stub"))]
 use crate::aggregator::stub_handlers::*;
 
-use crate::aggregator::http::{router, Route, resp_404};
+use crate::aggregator::http::{resp_404, router, Route};
 
 lazy_static::lazy_static! {
     static ref ROUTER: Router<Route> = router();

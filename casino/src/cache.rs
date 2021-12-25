@@ -47,7 +47,7 @@ impl<T: DeserializeOwned + Serialize> Cache<T> {
         Ok(Some(serde_json::from_slice(&res_raw).unwrap()))
     }
 
-    pub async fn get_bulk(&self, keys: &Vec<&str>) -> Result<HashMap<String, T>, Infallible> {
+    pub async fn get_bulk(&self, keys: &[&str]) -> Result<HashMap<String, T>, Infallible> {
         let mut conn = self.get_conn().await?;
         let redis_keys: Vec<String> = keys.iter().map(|k| self.format_key(k)).collect();
         let raw_results: Vec<Option<Vec<u8>>> = conn.get(&redis_keys).await.unwrap();
