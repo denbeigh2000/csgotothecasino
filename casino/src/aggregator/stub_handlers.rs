@@ -84,7 +84,9 @@ lazy_static::lazy_static! {
 static CLUTCH_CASE_IMG: &str = "https://community.cloudflare.steamstatic.com/economy/image/-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXU5A1PIYQNqhpOSV-fRPasw8rsUFJ5KBFZv668FFY5naqQIz4R7Yjix9bZkvKiZrmAzzlTu5AoibiT8d_x21Wy8hY_MWz1doSLMlhpM3FKbNs";
 static CLUTCH_CASE_KEY_IMG: &str = "https://community.cloudflare.steamstatic.com/economy/image/-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXX7gNTPcUxuxpJSXPbQv2S1MDeXkh6LBBOiev8ZQQ30KubIWVDudrgkNncw6-hY-2Fkz1S7JRz2erHodnzig2xqUVvYDrtZNjCAC7WDrU";
 
-pub async fn handle_websocket(req: Request<Body>) -> Result<Response<Body>, Infallible> {
+pub struct Handler {}
+
+pub async fn handle_websocket(_h: &Handler, req: Request<Body>) -> Result<Response<Body>, Infallible> {
     if !is_upgrade_request(&req) {
         return Ok(resp_400());
     }
@@ -95,7 +97,7 @@ pub async fn handle_websocket(req: Request<Body>) -> Result<Response<Body>, Infa
         let mut timer = tokio::time::interval(Duration::from_secs(30));
         loop {
             tokio::select! {
-                    msg = ws.next() => {
+                msg = ws.next() => {
                     let msg = match msg {
                         Some(m) => m,
                         None => return,
@@ -134,7 +136,7 @@ async fn send_unlock(socket: &mut WebSocketStream<Upgraded>) {
     handle_emit(socket, unlock).await.unwrap();
 }
 
-pub async fn handle_state(req: Request<Body>) -> Result<Response<Body>, Infallible> {
+pub async fn handle_state(_h: &Handler, req: Request<Body>) -> Result<Response<Body>, Infallible> {
     if req.method() != Method::GET {
         return Ok(resp_400());
     }
@@ -162,4 +164,11 @@ pub async fn handle_state(req: Request<Body>) -> Result<Response<Body>, Infallib
         .unwrap();
 
     Ok(resp)
+}
+
+pub async fn handle_upload(
+    h: &Handler,
+    mut req: Request<Body>,
+) -> Result<Response<Body>, Infallible> {
+    Ok(Response::builder().body(Body::empty()).unwrap())
 }

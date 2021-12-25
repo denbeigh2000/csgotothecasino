@@ -1,14 +1,11 @@
 use std::convert::Infallible;
+use std::sync::Arc;
 
-use bb8_redis::bb8::PooledConnection;
-use bb8_redis::RedisConnectionManager;
 use hyper::server::conn::AddrStream;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response};
 use route_recognizer::Router;
-use tokio::sync::watch::Receiver;
 
-use crate::steam::UnhydratedUnlock;
 
 mod http;
 mod websocket;
@@ -31,10 +28,20 @@ lazy_static::lazy_static! {
 
 pub async fn serve() -> Result<(), Infallible> {
     let svc = make_service_fn(|_socket: &AddrStream| async move {
-        Ok::<_, Infallible>(service_fn(move |req| async {
-            let resp: Result<Response<Body>, Infallible> = handle_request(req).await;
+        #[cfg(not(feature = "not-stub"))]
+        let h = Handler{};
+        #[cfg(feature = "not-stub")]
+        let h = new_handler_unimplemented();
 
-            resp
+        let h = Arc::new(h);
+
+        Ok::<_, Infallible>(service_fn(move |req| {
+            let h = Arc::clone(&h);
+            async move {
+                let resp: Result<Response<Body>, Infallible> = handle_request(&*h, req).await;
+
+                resp
+            }
         }))
     });
 
@@ -44,16 +51,12 @@ pub async fn serve() -> Result<(), Infallible> {
     Ok(())
 }
 
-struct Handle<'a> {
-    events: Receiver<UnhydratedUnlock>,
-    conn: PooledConnection<'a, RedisConnectionManager>,
-}
-
-async fn handle_request(req: Request<Body>) -> Result<Response<Body>, Infallible> {
+async fn handle_request(h: &Handler, req: Request<Body>) -> Result<Response<Body>, Infallible> {
     match ROUTER.recognize(req.uri().path()) {
         Ok(m) => match m.handler() {
-            Route::State => handle_state(req).await,
-            Route::Stream => handle_websocket(req).await,
+            Route::State => handle_state(h, req).await,
+            Route::Stream => handle_websocket(h, req).await,
+            Route::Upload => handle_upload(h, req).await,
         },
         Err(_) => Ok(resp_404()),
     }

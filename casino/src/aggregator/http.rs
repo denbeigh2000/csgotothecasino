@@ -12,12 +12,14 @@ pub fn resp_400() -> Response<Body> {
 pub enum Route {
     State,
     Stream,
+    Upload,
 }
 
 pub fn router() -> Router<Route> {
     let mut router = Router::new();
     router.add("/", Route::State);
     router.add("/stream", Route::Stream);
+    router.add("/upload", Route::Upload);
 
     router
 }

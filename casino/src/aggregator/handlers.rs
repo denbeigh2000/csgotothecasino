@@ -1,13 +1,18 @@
 use std::convert::Infallible;
 use std::sync::Arc;
 
-use futures_util::Stream;
-use hyper::{Body, Request, Response};
+use futures_util::{Stream, SinkExt, StreamExt};
+use hyper::{Body, Method, Request, Response, StatusCode};
+use hyper_tungstenite::tungstenite::Message;
+use hyper_tungstenite::{is_upgrade_request, HyperWebsocket, WebSocketStream};
 use tokio::sync::watch::{self, Receiver, Sender};
 
 use crate::csgofloat::CsgoFloatClient;
 use crate::steam::{MarketPriceClient, UnhydratedUnlock, Unlock};
 use crate::store::Store;
+
+use super::http::resp_400;
+use super::websocket::{handle_emit, handle_recv};
 
 pub struct Handler {
     events_rx: Receiver<Option<UnhydratedUnlock>>,
@@ -16,6 +21,10 @@ pub struct Handler {
     store: Store,
     csgofloat_client: CsgoFloatClient,
     market_price_client: MarketPriceClient,
+}
+
+pub fn new_handler_unimplemented() -> Handler {
+    todo!()
 }
 
 impl Handler {
@@ -80,14 +89,95 @@ impl Handler {
     }
 }
 
-pub async fn handle_state(req: Request<Body>) -> Result<Response<Body>, Infallible> {
-    Ok(Response::builder().body(Body::empty()).unwrap())
+pub async fn handle_state(h: &Handler, req: Request<Body>) -> Result<Response<Body>, Infallible> {
+    if req.method() != Method::GET {
+        return Ok(resp_400());
+    }
+
+    let state = h.get_state().await.unwrap();
+    let state_data = serde_json::to_vec(&state).unwrap();
+    let resp = Response::builder().body(Body::from(state_data)).unwrap();
+
+    Ok(resp)
 }
 
-pub async fn handle_websocket(req: Request<Body>) -> Result<Response<Body>, Infallible> {
-    Ok(Response::builder().body(Body::empty()).unwrap())
+pub async fn handle_upload(
+    h: &Handler,
+    mut req: Request<Body>,
+) -> Result<Response<Body>, Infallible> {
+    if req.method() != Method::POST {
+        eprintln!("bad request type");
+        return Ok(resp_400());
+    }
+
+    let data = hyper::body::to_bytes(req.body_mut()).await.unwrap();
+    let unlock: Vec<UnhydratedUnlock> = match serde_json::from_slice(&data) {
+        Ok(u) => u,
+        Err(e) => {
+            eprintln!("parsing failed: {}", e);
+            return Ok(resp_400());
+        }
+    };
+
+    let status = match h.save(&unlock).await {
+        Ok(_) => StatusCode::OK,
+        Err(e) => {
+            eprintln!("saving failed: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        }
+    };
+
+    let resp = Response::builder()
+        .status(status)
+        .body(Body::empty())
+        .unwrap();
+
+    Ok(resp)
 }
 
-pub async fn handle_upload(req: Request<Body>) -> Result<Response<Body>, Infallible> {
-    Ok(Response::builder().body(Body::empty()).unwrap())
+pub async fn handle_websocket(
+    h: &Handler,
+    req: Request<Body>,
+) -> Result<Response<Body>, Infallible> {
+    if !is_upgrade_request(&req) {
+        return Ok(resp_400());
+    }
+
+    let (resp, socket) = hyper_tungstenite::upgrade(req, None).unwrap();
+    let stream = h.event_stream().await?;
+    tokio::spawn(handle_upgraded_websocket(Box::pin(stream), socket));
+
+    Ok(resp)
+}
+
+async fn handle_upgraded_websocket<S: Stream<Item = Unlock> + Unpin>(mut stream: S, ws: HyperWebsocket) {
+    let mut ws = ws.await.unwrap();
+    loop {
+        tokio::select! {
+            msg = ws.next() => {
+                let msg = match msg {
+                    Some(m) => m,
+                    None => return,
+                };
+
+                if handle_recv(msg.unwrap()).await.unwrap() {
+                    // This is a close message.
+                    return;
+                }
+            },
+
+            unlock = stream.next() => {
+                match unlock {
+                    Some(u) => {
+                        handle_emit(&mut ws, u).await.unwrap();
+                    },
+                    None => {
+                        // Server is closing, shutdown connection.
+                        ws.send(Message::Close(None)).await.unwrap();
+                        return
+                    }
+                }
+            }
+        }
+    }
 }
