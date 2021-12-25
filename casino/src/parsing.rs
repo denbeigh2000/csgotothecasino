@@ -21,10 +21,13 @@ pub struct TrivialItem {
 
 impl TrivialItem {
     pub fn new(name: String, image_url: String, color: Option<String>) -> Self {
-        Self { name, image_url, color }
+        Self {
+            name,
+            image_url,
+            color,
+        }
     }
 }
-
 
 #[derive(Debug, Hash, PartialEq, Eq, Deserialize, Serialize)]
 pub struct InventoryId {
@@ -55,7 +58,7 @@ pub enum ParseResult {
     Unparseable,
 }
 
-pub fn parse_raw_unlock(trade: ElementRef<'_>, since: &DateTime<Utc>) -> ParseResult {
+pub fn parse_raw_unlock(trade: ElementRef<'_>, since: Option<&DateTime<Utc>>) -> ParseResult {
     let desc = match trade.select(&DESCRIPTION_SELECTOR).next() {
         Some(d) => d,
         // TODO: Should convey more info
@@ -91,7 +94,7 @@ pub fn parse_raw_unlock(trade: ElementRef<'_>, since: &DateTime<Utc>) -> ParseRe
     .unwrap();
     let datetime = Utc.from_local_datetime(&datetime).unwrap();
 
-    if &datetime < since {
+    if since.map(|s| &datetime < s).unwrap_or(false) {
         // We have successfully started parsing a trade that is older than our threshold, return
         // early.
         return ParseResult::TooOld;
@@ -103,7 +106,6 @@ pub fn parse_raw_unlock(trade: ElementRef<'_>, since: &DateTime<Utc>) -> ParseRe
     let key_node = lost_items.next();
 
     let gained_items = sides.next().unwrap();
-
     let gained_item = gained_items.select(&TRADE_ITEM_SELECTOR).next().unwrap();
 
     ParseResult::Success(RawUnlock {
@@ -137,7 +139,10 @@ fn item_from_node(r: ElementRef<'_>, variant: String) -> TrivialItem {
         .nth(5)
         .unwrap();
 
-    let image_url = format!("https://community.cloudflare.steamstatic.com/economy/image/{}", image_id);
+    let image_url = format!(
+        "https://community.cloudflare.steamstatic.com/economy/image/{}",
+        image_id
+    );
 
     TrivialItem {
         name,

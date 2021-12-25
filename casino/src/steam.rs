@@ -191,18 +191,18 @@ impl SteamClient {
 
     pub async fn fetch_new_items(
         &self,
-        since: &DateTime<Utc>,
+        since: Option<&DateTime<Utc>>,
     ) -> Result<Vec<UnhydratedUnlock>, FetchNewItemsError> {
-        let unhydrated = self.fetch_new_unhydrated_items(since).await?;
+        let unhydrated = self.fetch_new_unprepared_items(since).await?;
         Ok(self
             .prepare_unlocks(unhydrated, self.username.clone())
             .await
             .unwrap())
     }
 
-    pub async fn fetch_new_unhydrated_items(
+    async fn fetch_new_unprepared_items(
         &self,
-        since: &DateTime<Utc>,
+        since: Option<&DateTime<Utc>>,
     ) -> Result<Vec<RawUnlock>, FetchNewItemsError> {
         let resp = self
             .http_client
@@ -248,7 +248,7 @@ impl SteamClient {
         Ok(unlocks)
     }
 
-    pub async fn prepare_unlocks(
+    async fn prepare_unlocks(
         &self,
         items: Vec<RawUnlock>,
         name: String,
