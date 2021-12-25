@@ -1,10 +1,14 @@
 use std::collections::HashMap;
 use std::convert::Infallible;
+use std::sync::Arc;
 
 pub use crate::csgofloat::ItemDescription;
 pub use crate::parsing::TrivialItem;
+use crate::cache::Cache;
 use crate::parsing::{parse_raw_unlock, InventoryId, Item, ParseResult, RawUnlock, TRADE_SELECTOR};
 
+use bb8_redis::RedisConnectionManager;
+use bb8_redis::bb8::Pool;
 use chrono::{DateTime, Utc};
 use reqwest::cookie::Jar;
 use reqwest::{Client, StatusCode, Url};
@@ -367,4 +371,31 @@ pub async fn get_market_price(
     let resp: RawMarketPrices = client.get(url).send().await.unwrap().json().await.unwrap();
 
     resp.try_into()
+}
+
+pub struct MarketPriceClient {
+    client: Client,
+    cache: Cache<MarketPrices>,
+}
+
+impl MarketPriceClient {
+    pub fn new(pool: Arc<Pool<RedisConnectionManager>>) -> Self {
+        let cache = Cache::new(pool, "market".to_string());
+        let client = Client::new();
+        Self { client, cache }
+    }
+
+    pub async fn get(&self, market_name: &str) -> Result<MarketPrices, Infallible> {
+        if let Some(price) = self.cache.get(market_name).await? {
+            return Ok(price);
+        }
+
+        let price = get_market_price(&self.client, market_name).await?;
+
+        if let Err(e) = self.cache.set(market_name, &price).await {
+            eprintln!("error updating market cache: {}", e);
+        }
+
+        Ok(price)
+    }
 }
