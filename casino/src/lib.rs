@@ -4,8 +4,9 @@ use crate::parsing::InventoryId;
 use crate::steam::SteamClient;
 
 pub mod aggregator;
-mod parsing;
+mod cache;
 mod csgofloat;
+mod parsing;
 mod steam;
 mod store;
 
