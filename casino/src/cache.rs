@@ -49,8 +49,8 @@ impl<T: DeserializeOwned + Serialize> Cache<T> {
 
     pub async fn get_bulk(&self, keys: &Vec<&str>) -> Result<HashMap<String, T>, Infallible> {
         let mut conn = self.get_conn().await?;
-        let raw_results: Vec<Option<Vec<u8>>> = conn.get(&keys).await.unwrap();
         let redis_keys: Vec<String> = keys.iter().map(|k| self.format_key(k)).collect();
+        let raw_results: Vec<Option<Vec<u8>>> = conn.get(&redis_keys).await.unwrap();
 
         let results =
             raw_results

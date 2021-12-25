@@ -2,10 +2,9 @@ use std::convert::Infallible;
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use reqwest::{Body, Client, Url};
+use reqwest::{Client, Url};
 use tokio::time::interval;
 
-use crate::parsing::InventoryId;
 use crate::steam::{SteamClient, SteamCredentials, UnhydratedUnlock};
 
 lazy_static::lazy_static! {
@@ -59,13 +58,13 @@ impl Collector {
         }
 
         self.send_results(&new_items).await?;
-        let last = new_items.get(0).unwrap().clone();
-        self.last_unboxing = Some(last.at);
+        let last = new_items.get(0).unwrap().at;
+        self.last_unboxing = Some(last);
 
         Ok(())
     }
 
-    async fn send_results(&self, items: &Vec<UnhydratedUnlock>) -> Result<(), Infallible> {
+    async fn send_results(&self, items: &[UnhydratedUnlock]) -> Result<(), Infallible> {
         let data = serde_json::to_vec(items).unwrap();
         let url = COLLECTION_URL.clone();
         self.http_client.post(url).body(data).send().await.unwrap();

@@ -2,13 +2,13 @@ use std::collections::HashMap;
 use std::convert::Infallible;
 use std::sync::Arc;
 
+use crate::cache::Cache;
 pub use crate::csgofloat::ItemDescription;
 pub use crate::parsing::TrivialItem;
-use crate::cache::Cache;
 use crate::parsing::{parse_raw_unlock, InventoryId, Item, ParseResult, RawUnlock, TRADE_SELECTOR};
 
-use bb8_redis::RedisConnectionManager;
 use bb8_redis::bb8::Pool;
+use bb8_redis::RedisConnectionManager;
 use chrono::{DateTime, Utc};
 use reqwest::cookie::Jar;
 use reqwest::{Client, StatusCode, Url};
