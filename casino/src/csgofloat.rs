@@ -1,6 +1,7 @@
 use core::fmt;
-use std::fmt::Display;
+use std::{collections::HashMap, fmt::Display};
 
+use hyper::Body;
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_repr::Deserialize_repr;
@@ -126,10 +127,69 @@ pub async fn get_by_market_url(
         StatusCode::OK => {
             let data: FloatItemResponse = resp.json().await?;
             Ok(data.iteminfo)
-        },
+        }
         status => {
             eprintln!("CSGOFloat responded with error status {}", status);
             resp.json().await.map_err(|e| e.into())
         }
     }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct BulkRequestItem {
+    pub link: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+struct BulkRequest {
+    pub links: Vec<BulkRequestItem>,
+}
+
+pub async fn get_batch_by_market_url(
+    client: &Client,
+    urls: Vec<&str>,
+) -> Result<HashMap<String, ItemDescription>, CsgoFloatFetchError> {
+    let url_map: HashMap<String, String> = urls.iter().fold(HashMap::new(), |mut acc, url| {
+        let key = url
+            .split('A')
+            .nth(1)
+            .unwrap()
+            .split('D')
+            .next()
+            .unwrap()
+            .to_string();
+        acc.insert(url.to_string(), key);
+
+        acc
+    });
+
+    let links = urls
+        .into_iter()
+        .map(|l| BulkRequestItem {
+            link: l.to_string(),
+        })
+        .collect();
+    let bulk_req = BulkRequest { links };
+    let req_data = serde_json::to_vec(&bulk_req).unwrap();
+
+    let resp: HashMap<String, ItemDescription> = client
+        .post("https://api.csgofloat.com/bulk")
+        .body(Body::from(req_data))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+
+    let items_by_url = url_map
+        .into_iter()
+        .fold(HashMap::new(), |mut acc, (url, asset_id)| {
+            let item = resp.get(&asset_id).unwrap();
+            acc.insert(url, item.clone());
+
+            acc
+        });
+
+    Ok(items_by_url)
 }
