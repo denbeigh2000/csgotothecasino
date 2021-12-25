@@ -3,9 +3,7 @@ use std::convert::Infallible;
 
 pub use crate::csgofloat::ItemDescription;
 pub use crate::parsing::TrivialItem;
-use crate::parsing::{
-    parse_raw_unlock, InventoryId, Item, ParseResult, RawUnlock, TRADE_SELECTOR,
-};
+use crate::parsing::{parse_raw_unlock, InventoryId, Item, ParseResult, RawUnlock, TRADE_SELECTOR};
 
 use chrono::{DateTime, Utc};
 use reqwest::cookie::Jar;
@@ -19,6 +17,7 @@ pub struct UnhydratedUnlock {
     pub key: Option<TrivialItem>,
     pub case: TrivialItem,
     pub item_market_link: String,
+    pub item_market_name: String,
 
     pub at: DateTime<Utc>,
     pub name: String,
@@ -29,6 +28,7 @@ pub struct Unlock {
     pub key: Option<TrivialItem>,
     pub case: TrivialItem,
     pub item: ItemDescription,
+    pub item_value: MarketPrices,
 
     pub at: DateTime<Utc>,
     pub name: String,
@@ -105,7 +105,7 @@ pub struct InventoryDescription {
     pub instance_id: String,
     #[serde(rename(deserialize = "icon_url_large"))]
     pub icon_url: String,
-    #[serde(rename(deserialize = "market_name"))]
+    #[serde(rename(deserialize = "market_hash_name"))]
     pub name: String,
     #[serde(rename = "type")]
     pub variant: String,
@@ -297,6 +297,7 @@ impl SteamClient {
                 let item_data = data_map.get(&i.item).unwrap();
                 let item_asset = asset_map.get(&i.item).unwrap();
 
+                let item_market_name = item_data.name.clone();
                 let link_tpl = item_data
                     .actions
                     .iter()
@@ -317,6 +318,7 @@ impl SteamClient {
                     key,
                     case,
                     item_market_link,
+                    item_market_name,
                     at,
                     name,
                 }
@@ -325,4 +327,44 @@ impl SteamClient {
 
         Ok(results)
     }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct RawMarketPrices {
+    lowest_price: String,
+    volume: String,
+}
+
+impl TryInto<MarketPrices> for RawMarketPrices {
+    type Error = Infallible;
+
+    fn try_into(self) -> Result<MarketPrices, Self::Error> {
+        let (_, lowest_price_str) = self.lowest_price.split_at(1);
+        let lowest_price: f32 = lowest_price_str.parse().unwrap();
+        let volume: i32 = self.volume.parse().unwrap();
+
+        Ok(MarketPrices {
+            lowest_price,
+            volume,
+        })
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MarketPrices {
+    lowest_price: f32,
+    volume: i32,
+}
+
+pub async fn get_market_price(
+    client: &Client,
+    market_name: &str,
+) -> Result<MarketPrices, Infallible> {
+    let url = format!(
+        "https://steamcommunity.com/market/priceoverview/?appid=730&currency=1&market_hash_name={}",
+        market_name
+    );
+    let resp: RawMarketPrices = client.get(url).send().await.unwrap().json().await.unwrap();
+
+    resp.try_into()
 }

@@ -2,7 +2,7 @@ use std::convert::Infallible;
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use reqwest::{Client, Body, Url};
+use reqwest::{Body, Client, Url};
 use tokio::time::interval;
 
 use crate::parsing::InventoryId;
@@ -52,11 +52,7 @@ impl Collector {
 
     async fn poll(&mut self) -> Result<(), Infallible> {
         let since = self.last_unboxing.as_ref();
-        let new_items = self
-            .steam_client
-            .fetch_new_items(since)
-            .await
-            .unwrap();
+        let new_items = self.steam_client.fetch_new_items(since).await.unwrap();
 
         if new_items.is_empty() {
             return Ok(());
@@ -72,12 +68,7 @@ impl Collector {
     async fn send_results(&self, items: &Vec<UnhydratedUnlock>) -> Result<(), Infallible> {
         let data = serde_json::to_vec(items).unwrap();
         let url = COLLECTION_URL.clone();
-        self.http_client
-            .post(url)
-            .body(data)
-            .send()
-            .await
-            .unwrap();
+        self.http_client.post(url).body(data).send().await.unwrap();
 
         Ok(())
     }

@@ -52,17 +52,18 @@ impl<T: DeserializeOwned + Serialize> Cache<T> {
         let raw_results: Vec<Option<Vec<u8>>> = conn.get(&keys).await.unwrap();
         let redis_keys: Vec<String> = keys.iter().map(|k| self.format_key(k)).collect();
 
-        let results = raw_results
-            .into_iter()
-            .zip(keys.iter())
-            .fold(HashMap::new(), |mut acc, (raw, key)| {
-                if let Some(r) = raw {
-                    let parsed: T = serde_json::from_slice(&r).unwrap();
-                    acc.insert(key.to_string(), parsed);
-                }
+        let results =
+            raw_results
+                .into_iter()
+                .zip(keys.iter())
+                .fold(HashMap::new(), |mut acc, (raw, key)| {
+                    if let Some(r) = raw {
+                        let parsed: T = serde_json::from_slice(&r).unwrap();
+                        acc.insert(key.to_string(), parsed);
+                    }
 
-                acc
-            });
+                    acc
+                });
 
         Ok(results)
     }
@@ -79,12 +80,15 @@ impl<T: DeserializeOwned + Serialize> Cache<T> {
     }
 
     pub async fn set_bulk(&self, entries: &HashMap<String, T>) -> Result<(), Infallible> {
-        let serialised: Vec<(String, Vec<u8>)> = entries.iter().map(|(k, v)| {
-            let key = self.format_key(k);
-            let data = serde_json::to_vec(v).unwrap();
+        let serialised: Vec<(String, Vec<u8>)> = entries
+            .iter()
+            .map(|(k, v)| {
+                let key = self.format_key(k);
+                let data = serde_json::to_vec(v).unwrap();
 
-            (key, data)
-        }).collect();
+                (key, data)
+            })
+            .collect();
 
         let mut conn = self.get_conn().await.unwrap();
         let _: () = conn.set_multiple(&serialised).await.unwrap();

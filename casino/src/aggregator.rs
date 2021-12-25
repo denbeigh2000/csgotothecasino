@@ -14,8 +14,9 @@ use hyper_tungstenite::{is_upgrade_request, HyperWebsocket, WebSocketStream};
 use route_recognizer::Router;
 use tokio::sync::watch::{Receiver, Sender};
 
-use crate::steam::{ItemDescription, TrivialItem};
-use crate::steam::{UnhydratedUnlock, Unlock};
+use crate::steam::{
+    ItemDescription, MarketPrices, RawMarketPrices, TrivialItem, UnhydratedUnlock, Unlock,
+};
 
 lazy_static::lazy_static! {
     static ref ROUTER: Router<Route> = router();
@@ -24,59 +25,66 @@ lazy_static::lazy_static! {
 #[cfg(not(feature = "not-stub"))]
 lazy_static::lazy_static! {
     static ref STUB_ITEM: ItemDescription = serde_json::from_str(r##"{
-    "origin": 8,
-    "quality": 12,
-    "rarity": 3,
-    "a": "24028753890",
-    "d": "1030953410031234813",
-    "paintseed": 435,
-    "defindex": 19,
-    "paintindex": 776,
-    "stickers": [
-      {
-        "stickerId": 4965,
-        "slot": 0,
-        "codename": "stockh2021_team_navi_gold",
-        "material": "stockh2021/navi_gold",
-        "name": "Natus Vincere (Gold) | Stockholm 2021"
-      },
-      {
-        "stickerId": 4981,
-        "slot": 1,
-        "codename": "stockh2021_team_g2_gold",
-        "material": "stockh2021/g2_gold",
-        "name": "G2 Esports (Gold) | Stockholm 2021"
-      },
-      {
-        "stickerId": 1693,
-        "slot": 2,
-        "codename": "de_nuke_gold",
-        "material": "tournament_assets/de_nuke_gold",
-        "name": "Nuke (Gold)"
-      },
-      {
-        "stickerId": 5053,
-        "slot": 3,
-        "codename": "stockh2021_team_pgl_gold",
-        "material": "stockh2021/pgl_gold",
-        "name": "PGL (Gold) | Stockholm 2021"
-      }
-    ],
-    "floatid": "24028753890",
-    "floatvalue": 0.11490528285503387,
-    "s": "76561198035933253",
-    "m": "0",
-    "imageurl": "http://media.steampowered.com/apps/730/icons/econ/default_generated/weapon_p90_hy_blueprint_aqua_light_large.35f86b3da01a31539d5a592958c96356f63d1675.png",
-    "min": 0,
-    "max": 0.5,
-    "weapon_type": "P90",
-    "item_name": "Facility Negative",
-    "rarity_name": "Mil-Spec Grade",
-    "quality_name": "Souvenir",
-    "origin_name": "Found in Crate",
-    "wear_name": "Minimal Wear",
-    "full_item_name": "Souvenir P90 | Facility Negative (Minimal Wear)"
-  }"##).unwrap();
+        "origin": 8,
+        "quality": 12,
+        "rarity": 3,
+        "a": "24028753890",
+        "d": "1030953410031234813",
+        "paintseed": 435,
+        "defindex": 19,
+        "paintindex": 776,
+        "stickers": [
+          {
+            "stickerId": 4965,
+            "slot": 0,
+            "codename": "stockh2021_team_navi_gold",
+            "material": "stockh2021/navi_gold",
+            "name": "Natus Vincere (Gold) | Stockholm 2021"
+          },
+          {
+            "stickerId": 4981,
+            "slot": 1,
+            "codename": "stockh2021_team_g2_gold",
+            "material": "stockh2021/g2_gold",
+            "name": "G2 Esports (Gold) | Stockholm 2021"
+          },
+          {
+            "stickerId": 1693,
+            "slot": 2,
+            "codename": "de_nuke_gold",
+            "material": "tournament_assets/de_nuke_gold",
+            "name": "Nuke (Gold)"
+          },
+          {
+            "stickerId": 5053,
+            "slot": 3,
+            "codename": "stockh2021_team_pgl_gold",
+            "material": "stockh2021/pgl_gold",
+            "name": "PGL (Gold) | Stockholm 2021"
+          }
+        ],
+        "floatid": "24028753890",
+        "floatvalue": 0.11490528285503387,
+        "s": "76561198035933253",
+        "m": "0",
+        "imageurl": "http://media.steampowered.com/apps/730/icons/econ/default_generated/weapon_p90_hy_blueprint_aqua_light_large.35f86b3da01a31539d5a592958c96356f63d1675.png",
+        "min": 0,
+        "max": 0.5,
+        "weapon_type": "P90",
+        "item_name": "Facility Negative",
+        "rarity_name": "Mil-Spec Grade",
+        "quality_name": "Souvenir",
+        "origin_name": "Found in Crate",
+        "wear_name": "Minimal Wear",
+        "full_item_name": "Souvenir P90 | Facility Negative (Minimal Wear)"
+    }"##).unwrap();
+
+    static ref STUB_ITEM_VALUE: RawMarketPrices = serde_json::from_str(r##"{
+        "success": true,
+        "lowest_price": "$1.81",
+        "volume": "3",
+        "median_price": "$1.68"
+    }"##).unwrap();
 }
 
 #[cfg(not(feature = "not-stub"))]
@@ -145,17 +153,28 @@ async fn handle_websocket(req: Request<Body>) -> Result<Response<Body>, Infallib
     Ok(Response::builder().body(Body::empty()).unwrap())
 }
 
+#[cfg(feature = "not-stub")]
+async fn handle_upload(req: Request<Body>) -> Result<Response<Body>, Infallible> {
+    Ok(Response::builder().body(Body::empty()).unwrap())
+}
+
 #[cfg(not(feature = "not-stub"))]
 async fn handle_state(req: Request<Body>) -> Result<Response<Body>, Infallible> {
     if req.method() != Method::GET {
         return Ok(resp_400());
     }
 
+    let item_value: MarketPrices = (*STUB_ITEM_VALUE).clone().try_into().unwrap();
     let data = vec![Unlock {
         name: "denbeigh".into(),
         item: STUB_ITEM.clone(),
+        item_value,
         case: TrivialItem::new("Clutch Case".into(), CLUTCH_CASE_IMG.to_string(), None),
-        key: Some(TrivialItem::new("Clutch Case Key".into(), CLUTCH_CASE_KEY_IMG.to_string(), None)),
+        key: Some(TrivialItem::new(
+            "Clutch Case Key".into(),
+            CLUTCH_CASE_KEY_IMG.to_string(),
+            None,
+        )),
 
         at: Utc::now(),
     }];
@@ -204,10 +223,16 @@ async fn handle_websocket(req: Request<Body>) -> Result<Response<Body>, Infallib
 
 #[cfg(not(feature = "not-stub"))]
 async fn send_unlock(socket: &mut WebSocketStream<Upgraded>) {
+    let item_value: MarketPrices = (*STUB_ITEM_VALUE).clone().try_into().unwrap();
     let unlock = Unlock {
-        key: Some(TrivialItem::new("Clutch Case Key".into(), CLUTCH_CASE_KEY_IMG.to_string(), None)),
+        key: Some(TrivialItem::new(
+            "Clutch Case Key".into(),
+            CLUTCH_CASE_KEY_IMG.to_string(),
+            None,
+        )),
         case: TrivialItem::new("Clutch Case".into(), CLUTCH_CASE_IMG.to_string(), None),
         item: STUB_ITEM.clone(),
+        item_value,
 
         at: Utc::now(),
         name: "denbeigh".into(),
