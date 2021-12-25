@@ -1,10 +1,13 @@
 use core::fmt;
-use std::{collections::HashMap, fmt::Display};
+use std::{collections::HashMap, convert::Infallible, fmt::Display, sync::Arc};
 
+use bb8_redis::{bb8::Pool, RedisConnectionManager};
 use hyper::Body;
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_repr::Deserialize_repr;
+
+use crate::cache::Cache;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Sticker {
@@ -145,9 +148,9 @@ struct BulkRequest {
     pub links: Vec<BulkRequestItem>,
 }
 
-pub async fn get_batch_by_market_url(
+pub async fn get_bulk_by_market_url(
     client: &Client,
-    urls: Vec<&str>,
+    urls: &Vec<&str>,
 ) -> Result<HashMap<String, ItemDescription>, CsgoFloatFetchError> {
     let url_map: HashMap<String, String> = urls.iter().fold(HashMap::new(), |mut acc, url| {
         let key = url
@@ -164,7 +167,7 @@ pub async fn get_batch_by_market_url(
     });
 
     let links = urls
-        .into_iter()
+        .iter()
         .map(|l| BulkRequestItem {
             link: l.to_string(),
         })
@@ -192,4 +195,56 @@ pub async fn get_batch_by_market_url(
         });
 
     Ok(items_by_url)
+}
+
+pub struct CsgoFloatClient {
+    cache: Cache<ItemDescription>,
+    client: Client,
+}
+
+impl CsgoFloatClient {
+    pub fn new(pool: Arc<Pool<RedisConnectionManager>>) -> Self {
+        let cache = Cache::new(pool, "floatcache".to_string());
+        let client = Client::new();
+
+        Self { cache, client }
+    }
+
+    pub async fn get(&self, url: &str) -> Result<ItemDescription, Infallible> {
+        if let Some(entry) = self.cache.get(url).await.unwrap() {
+            return Ok(entry);
+        }
+
+        let res = get_by_market_url(&self.client, url).await.unwrap();
+        self.cache.set(url, &res).await?;
+
+        Ok(res)
+    }
+
+    pub async fn get_bulk(
+        &self,
+        urls: Vec<&str>,
+    ) -> Result<HashMap<String, ItemDescription>, Infallible> {
+        let res = self.cache.get_bulk(&urls).await?;
+        let missing: Vec<&str> = urls
+            .iter()
+            .filter(|u| res.contains_key(**u))
+            .map(|u| *u)
+            .collect();
+        if missing.is_empty() {
+            return Ok(res);
+        }
+
+        let fresh = get_bulk_by_market_url(&self.client, &missing)
+            .await
+            .unwrap();
+
+        self.cache.set_bulk(&fresh).await.unwrap();
+        let res = fresh.into_iter().fold(res, |mut acc, (k, v)| {
+            acc.insert(k, v);
+            acc
+        });
+
+        Ok(res)
+    }
 }
