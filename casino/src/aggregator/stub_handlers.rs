@@ -1,11 +1,8 @@
 use std::convert::Infallible;
 use std::time::Duration;
 
-use bb8_redis::bb8::PooledConnection;
-use bb8_redis::RedisConnectionManager;
 use chrono::Utc;
-use futures_util::{SinkExt, StreamExt};
-use hyper::server::conn::AddrStream;
+use futures_util::StreamExt;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::upgrade::Upgraded;
 use hyper::{Body, Method, Request, Response, StatusCode};
@@ -17,12 +14,9 @@ use tokio::sync::watch::{Receiver, Sender};
 use crate::steam::{
     ItemDescription, MarketPrices, RawMarketPrices, TrivialItem, UnhydratedUnlock, Unlock,
 };
+use crate::aggregator::http::resp_400;
+use crate::aggregator::websocket::{handle_emit, handle_recv};
 
-lazy_static::lazy_static! {
-    static ref ROUTER: Router<Route> = router();
-}
-
-#[cfg(not(feature = "not-stub"))]
 lazy_static::lazy_static! {
     static ref STUB_ITEM: ItemDescription = serde_json::from_str(r##"{
         "origin": 8,
@@ -87,110 +81,10 @@ lazy_static::lazy_static! {
     }"##).unwrap();
 }
 
-#[cfg(not(feature = "not-stub"))]
 static CLUTCH_CASE_IMG: &str = "https://community.cloudflare.steamstatic.com/economy/image/-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXU5A1PIYQNqhpOSV-fRPasw8rsUFJ5KBFZv668FFY5naqQIz4R7Yjix9bZkvKiZrmAzzlTu5AoibiT8d_x21Wy8hY_MWz1doSLMlhpM3FKbNs";
-#[cfg(not(feature = "not-stub"))]
 static CLUTCH_CASE_KEY_IMG: &str = "https://community.cloudflare.steamstatic.com/economy/image/-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXX7gNTPcUxuxpJSXPbQv2S1MDeXkh6LBBOiev8ZQQ30KubIWVDudrgkNncw6-hY-2Fkz1S7JRz2erHodnzig2xqUVvYDrtZNjCAC7WDrU";
 
-enum Route {
-    State,
-    Stream,
-}
-
-fn router() -> Router<Route> {
-    let mut router = Router::new();
-    router.add("/", Route::State);
-    router.add("/stream", Route::Stream);
-
-    router
-}
-
-pub async fn serve() -> Result<(), Infallible> {
-    let svc = make_service_fn(|_socket: &AddrStream| async move {
-        Ok::<_, Infallible>(service_fn(move |req| async {
-            let resp: Result<Response<Body>, Infallible> = handle_request(req).await;
-
-            resp
-        }))
-    });
-
-    let addr = "0.0.0.0:7000".parse().unwrap();
-    hyper::Server::bind(&addr).serve(svc).await.unwrap();
-
-    Ok(())
-}
-
-struct Handle<'a> {
-    events: Receiver<UnhydratedUnlock>,
-    conn: PooledConnection<'a, RedisConnectionManager>,
-}
-
-async fn handle_request(req: Request<Body>) -> Result<Response<Body>, Infallible> {
-    match ROUTER.recognize(req.uri().path()) {
-        Ok(m) => match m.handler() {
-            Route::State => handle_state(req).await,
-            Route::Stream => handle_websocket(req).await,
-        },
-        Err(_) => Ok(resp_404()),
-    }
-}
-
-fn resp_404() -> Response<Body> {
-    Response::builder().status(404).body(Body::empty()).unwrap()
-}
-
-fn resp_400() -> Response<Body> {
-    Response::builder().status(400).body(Body::empty()).unwrap()
-}
-
-#[cfg(feature = "not-stub")]
-async fn handle_state(req: Request<Body>) -> Result<Response<Body>, Infallible> {
-    Ok(Response::builder().body(Body::empty()).unwrap())
-}
-
-#[cfg(feature = "not-stub")]
-async fn handle_websocket(req: Request<Body>) -> Result<Response<Body>, Infallible> {
-    Ok(Response::builder().body(Body::empty()).unwrap())
-}
-
-#[cfg(feature = "not-stub")]
-async fn handle_upload(req: Request<Body>) -> Result<Response<Body>, Infallible> {
-    Ok(Response::builder().body(Body::empty()).unwrap())
-}
-
-#[cfg(not(feature = "not-stub"))]
-async fn handle_state(req: Request<Body>) -> Result<Response<Body>, Infallible> {
-    if req.method() != Method::GET {
-        return Ok(resp_400());
-    }
-
-    let item_value: MarketPrices = (*STUB_ITEM_VALUE).clone().try_into().unwrap();
-    let data = vec![Unlock {
-        name: "denbeigh".into(),
-        item: STUB_ITEM.clone(),
-        item_value,
-        case: TrivialItem::new("Clutch Case".into(), CLUTCH_CASE_IMG.to_string(), None),
-        key: Some(TrivialItem::new(
-            "Clutch Case Key".into(),
-            CLUTCH_CASE_KEY_IMG.to_string(),
-            None,
-        )),
-
-        at: Utc::now(),
-    }];
-
-    let encoded_data = serde_json::to_vec(&data).unwrap();
-
-    let resp = Response::builder()
-        .header(hyper::header::CONTENT_TYPE, "application/json")
-        .body(Body::from(encoded_data))
-        .unwrap();
-
-    Ok(resp)
-}
-
-#[cfg(not(feature = "not-stub"))]
-async fn handle_websocket(req: Request<Body>) -> Result<Response<Body>, Infallible> {
+pub async fn handle_websocket(req: Request<Body>) -> Result<Response<Body>, Infallible> {
     if !is_upgrade_request(&req) {
         return Ok(resp_400());
     }
@@ -221,7 +115,6 @@ async fn handle_websocket(req: Request<Body>) -> Result<Response<Body>, Infallib
     Ok(resp)
 }
 
-#[cfg(not(feature = "not-stub"))]
 async fn send_unlock(socket: &mut WebSocketStream<Upgraded>) {
     let item_value: MarketPrices = (*STUB_ITEM_VALUE).clone().try_into().unwrap();
     let unlock = Unlock {
@@ -241,23 +134,32 @@ async fn send_unlock(socket: &mut WebSocketStream<Upgraded>) {
     handle_emit(socket, unlock).await.unwrap();
 }
 
-async fn handle_recv(msg: Message) -> Result<bool, Infallible> {
-    Ok(match msg {
-        Message::Close(_) => {
-            eprintln!("received close, shutting down");
-            true
-        }
-        _ => false,
-    })
-}
+pub async fn handle_state(req: Request<Body>) -> Result<Response<Body>, Infallible> {
+    if req.method() != Method::GET {
+        return Ok(resp_400());
+    }
 
-async fn handle_emit(
-    socket: &mut WebSocketStream<Upgraded>,
-    unlock: Unlock,
-) -> Result<(), Infallible> {
-    let encoded = serde_json::to_vec(&unlock).unwrap();
-    let msg = Message::Binary(encoded);
-    socket.send(msg).await.unwrap();
+    let item_value: MarketPrices = (*STUB_ITEM_VALUE).clone().try_into().unwrap();
+    let data = vec![Unlock {
+        name: "denbeigh".into(),
+        item: STUB_ITEM.clone(),
+        item_value,
+        case: TrivialItem::new("Clutch Case".into(), CLUTCH_CASE_IMG.to_string(), None),
+        key: Some(TrivialItem::new(
+            "Clutch Case Key".into(),
+            CLUTCH_CASE_KEY_IMG.to_string(),
+            None,
+        )),
 
-    Ok(())
+        at: Utc::now(),
+    }];
+
+    let encoded_data = serde_json::to_vec(&data).unwrap();
+
+    let resp = Response::builder()
+        .header(hyper::header::CONTENT_TYPE, "application/json")
+        .body(Body::from(encoded_data))
+        .unwrap();
+
+    Ok(resp)
 }

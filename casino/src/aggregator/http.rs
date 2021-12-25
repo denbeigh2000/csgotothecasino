@@ -1,0 +1,23 @@
+use hyper::{Body, Response};
+use route_recognizer::Router;
+
+pub fn resp_404() -> Response<Body> {
+    Response::builder().status(404).body(Body::empty()).unwrap()
+}
+
+pub fn resp_400() -> Response<Body> {
+    Response::builder().status(400).body(Body::empty()).unwrap()
+}
+
+pub enum Route {
+    State,
+    Stream,
+}
+
+pub fn router() -> Router<Route> {
+    let mut router = Router::new();
+    router.add("/", Route::State);
+    router.add("/stream", Route::Stream);
+
+    router
+}
