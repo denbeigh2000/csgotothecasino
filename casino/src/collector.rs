@@ -52,7 +52,11 @@ impl Collector {
     async fn poll(&mut self) -> Result<(), Infallible> {
         let since = self.last_unboxing.as_ref();
         let last_id = self.last_parsed_history_id.as_deref();
-        let mut new_items = self.steam_client.fetch_new_items(since, last_id).await.unwrap();
+        let mut new_items = self
+            .steam_client
+            .fetch_new_items(since, last_id)
+            .await
+            .unwrap();
 
         if new_items.is_empty() {
             return Ok(());

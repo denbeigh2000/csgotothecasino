@@ -2,7 +2,6 @@ use hyper::StatusCode;
 
 use super::parsing::ParseFailure;
 
-
 pub enum FetchNewUnpreparedItemsError {
     TransportError(reqwest::Error),
     AuthenticationFailure,
@@ -24,7 +23,7 @@ impl std::fmt::Debug for FetchNewUnpreparedItemsError {
             Self::AuthenticationFailure => write!(f, "Authentication failure"),
             Self::UnhandledStatusCode(code) => write!(f, "unhandled status code: {}", code),
             Self::NoHistoryFound => write!(f, "failed to parse any history from steam site"),
-            Self::PageParseError(e) => write!(f, "failed to parse inventory history: {}", e)
+            Self::PageParseError(e) => write!(f, "failed to parse inventory history: {}", e),
         }
     }
 }

@@ -1,10 +1,9 @@
 use std::collections::HashMap;
-use std::convert::Infallible;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use bb8_redis::bb8::{Pool, PooledConnection};
-use bb8_redis::redis::AsyncCommands;
+use bb8_redis::bb8::{Pool, PooledConnection, RunError};
+use bb8_redis::redis::{AsyncCommands, RedisError};
 use bb8_redis::RedisConnectionManager;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -15,6 +14,34 @@ pub struct Cache<T: DeserializeOwned> {
     _data: PhantomData<T>,
 }
 
+#[derive(Debug)]
+pub enum CacheError {
+    RedisError(RedisError),
+    SerdeError(serde_json::Error),
+    ConnectionTimeout,
+}
+
+impl From<RedisError> for CacheError {
+    fn from(e: RedisError) -> Self {
+        Self::RedisError(e)
+    }
+}
+
+impl From<RunError<RedisError>> for CacheError {
+    fn from(e: RunError<RedisError>) -> Self {
+        match e {
+            RunError::User(e) => Self::RedisError(e),
+            RunError::TimedOut => Self::ConnectionTimeout,
+        }
+    }
+}
+
+impl From<serde_json::Error> for CacheError {
+    fn from(e: serde_json::Error) -> Self {
+        Self::SerdeError(e)
+    }
+}
+
 impl<T: DeserializeOwned + Serialize> Cache<T> {
     pub fn new(pool: Arc<Pool<RedisConnectionManager>>, key: String) -> Self {
         let _data = PhantomData;
@@ -23,31 +50,28 @@ impl<T: DeserializeOwned + Serialize> Cache<T> {
 
     async fn get_conn<'a, 'b>(
         &'a self,
-    ) -> Result<PooledConnection<'b, RedisConnectionManager>, Infallible>
+    ) -> Result<PooledConnection<'b, RedisConnectionManager>, CacheError>
     where
         'a: 'b,
     {
-        Ok(self.pool.get().await.unwrap())
+        Ok(self.pool.get().await?)
     }
 
     fn format_key(&self, given: &str) -> String {
         format!("{}_{}", self.key, given)
     }
 
-    pub async fn get(&self, key: &str) -> Result<Option<T>, Infallible> {
+    pub async fn get(&self, key: &str) -> Result<Option<T>, CacheError> {
         let redis_key = self.format_key(key);
         let mut conn = self.get_conn().await?;
 
-        let res_raw: Option<Vec<u8>> = conn.get(&redis_key).await.unwrap();
-        let res_raw = match res_raw {
-            Some(r) => r,
-            None => return Ok(None),
-        };
+        let res_raw: Option<Vec<u8>> = conn.get(&redis_key).await?;
+        let decoded = res_raw.map(|r| serde_json::from_slice(&r)).transpose()?;
 
-        Ok(Some(serde_json::from_slice(&res_raw).unwrap()))
+        Ok(decoded)
     }
 
-    pub async fn get_bulk(&self, keys: &[&str]) -> Result<HashMap<String, T>, Infallible> {
+    pub async fn get_bulk(&self, keys: &[&str]) -> Result<HashMap<String, T>, CacheError> {
         // NOTE: We defer to the singular variety here if we have a single item
         // to retreieve, because redis-rs' internal implementation can't
         // distinguish between a single item and a single-len vec, meaning it
@@ -68,48 +92,47 @@ impl<T: DeserializeOwned + Serialize> Cache<T> {
 
         let mut conn = self.get_conn().await?;
         let redis_keys: Vec<String> = keys.iter().map(|k| self.format_key(k)).collect();
-        let raw_results: Vec<Option<String>> = conn.get(redis_keys).await.unwrap();
+        let raw_results: Vec<Option<String>> = conn.get(redis_keys).await?;
 
-        let results =
-            raw_results
-                .into_iter()
-                .zip(keys.iter())
-                .fold(HashMap::new(), |mut acc, (raw, key)| {
-                    if let Some(r) = raw {
-                        let parsed: T = serde_json::from_str(&r).unwrap();
-                        acc.insert(key.to_string(), parsed);
-                    }
+        let results = raw_results.into_iter().zip(keys.iter()).try_fold(
+            HashMap::new(),
+            |mut acc, (raw, key)| {
+                if let Some(r) = raw {
+                    let parsed: T = serde_json::from_str(&r)?;
+                    acc.insert(key.to_string(), parsed);
+                }
 
-                    acc
-                });
+                Ok::<_, serde_json::Error>(acc)
+            },
+        )?;
 
         Ok(results)
     }
 
-    pub async fn set(&self, key: &str, data: &T) -> Result<(), Infallible> {
+    pub async fn set(&self, key: &str, data: &T) -> Result<(), CacheError> {
         let redis_key = self.format_key(key);
-        let serialised = serde_json::to_vec(data).unwrap();
+        let serialised = serde_json::to_vec(data)?;
 
         let mut conn = self.get_conn().await?;
 
-        let _: () = conn.set(redis_key, serialised).await.unwrap();
+        let _: () = conn.set(redis_key, serialised).await?;
 
         Ok(())
     }
 
-    pub async fn set_bulk(&self, entries: &HashMap<String, T>) -> Result<(), Infallible> {
+    pub async fn set_bulk(&self, entries: &HashMap<String, T>) -> Result<(), CacheError> {
         let serialised: Vec<(String, Vec<u8>)> = entries
             .iter()
             .map(|(k, v)| {
                 let key = self.format_key(k);
-                let data = serde_json::to_vec(v).unwrap();
+                let data = serde_json::to_vec(v)?;
 
-                (key, data)
+                Ok((key, data))
             })
-            .collect();
+            .collect::<Result<_, serde_json::Error>>()?;
 
-        let mut conn = self.get_conn().await.unwrap();
-        let _: () = conn.set_multiple(&serialised).await.unwrap();
+        let mut conn = self.get_conn().await?;
+        let _: () = conn.set_multiple(&serialised).await?;
 
         Ok(())
     }

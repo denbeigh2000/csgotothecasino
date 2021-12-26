@@ -202,12 +202,7 @@ pub fn parse_raw_unlock(
     if last_seen_id.map(|l| l == history_id).unwrap_or(false) {
         return Ok(ParseSuccess::TooOld);
     }
-
-    let key = match key_node.map(item_from_node) {
-        Some(Ok(v)) => Some(v),
-        Some(Err(e)) => return Err(e.into()),
-        None => None,
-    };
+    let key = key_node.map(item_from_node).transpose()?;
 
     Ok(ParseSuccess::ValidItem(RawUnlock {
         history_id: history_id.to_string(),

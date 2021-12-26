@@ -1,6 +1,6 @@
 use std::env;
 
-use chrono::{Utc, NaiveDate, TimeZone};
+use chrono::{NaiveDate, TimeZone, Utc};
 
 use casino::collector::Collector;
 use casino::steam::SteamCredentials;
