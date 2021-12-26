@@ -43,6 +43,23 @@ impl ToRedisArgs for UnhydratedUnlock {
     }
 }
 
+impl FromRedisValue for Unlock {
+    fn from_redis_value(v: &bb8_redis::redis::Value) -> bb8_redis::redis::RedisResult<Self> {
+        let data: Vec<u8> = from_redis_value(v)?;
+        Ok(serde_json::from_slice(&data).unwrap())
+    }
+}
+
+impl ToRedisArgs for Unlock {
+    fn write_redis_args<W>(&self, out: &mut W)
+    where
+        W: ?Sized + bb8_redis::redis::RedisWrite,
+    {
+        let data = serde_json::to_vec(self).unwrap();
+        out.write_arg(&data)
+    }
+}
+
 impl Store {
     pub async fn new<T: IntoConnectionInfo>(i: T) -> Result<Self, RedisError> {
         let conn_info = i.into_connection_info()?;
@@ -73,19 +90,26 @@ impl Store {
         Ok(res.unwrap_or_else(Vec::new))
     }
 
-    pub async fn append_entry(&self, entry: &UnhydratedUnlock) -> Result<(), Infallible> {
-        let mut conn = self.get_conn().await?;
-        let _res: () = conn.lpush("unlocks", entry).await.unwrap();
-        let _res: () = conn.publish(&EVENT_KEY, entry).await.unwrap();
+    pub async fn append_entry(&self, entry: &UnhydratedUnlock) -> Result<(), RedisError> {
+        let mut conn = self.get_conn().await.unwrap();
+        let _res: () = conn.lpush("unlocks", entry).await?;
+
+        Ok(())
+    }
+
+    pub async fn publish(&self, entry: &Unlock) -> Result<(), RedisError> {
+        let mut conn = self.get_conn().await.unwrap();
+        let _res: () = conn.publish(&EVENT_KEY, entry).await?;
 
         Ok(())
     }
 
     pub async fn get_event_stream(&self) -> Result<impl Stream<Item = Unlock>, RedisError> {
-        let conn = self.make_conn().await?.into_pubsub();
+        let mut conn = self.make_conn().await?.into_pubsub();
+        conn.subscribe(EVENT_KEY).await?;
 
         let stream = conn.into_on_message().filter_map(|msg| async move {
-            let raw_data: Vec<u8> = match msg.get_payload() {
+            let raw_data: String = match msg.get_payload() {
                 Ok(d) => d,
                 Err(e) => {
                     eprintln!("failed to decode raw data: {}", e);
@@ -93,10 +117,11 @@ impl Store {
                 }
             };
 
-            match serde_json::from_slice(&raw_data) {
+            match serde_json::from_str(&raw_data) {
                 Ok(u) => Some(u),
                 Err(e) => {
                     eprintln!("failed to unmarshal response to json: {}", e);
+                    eprintln!("raw data was {}", &raw_data);
                     None
                 }
             }

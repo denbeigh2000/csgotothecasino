@@ -121,12 +121,8 @@ pub async fn handle_websocket(_h: &Handler, req: Request<Body>) -> Result<Respon
 async fn send_unlock(socket: &mut WebSocketStream<Upgraded>) {
     let item_value: MarketPrices = (*STUB_ITEM_VALUE).clone().try_into().unwrap();
     let unlock = Unlock {
-        key: Some(TrivialItem::new(
-            "Clutch Case Key".into(),
-            CLUTCH_CASE_KEY_IMG.to_string(),
-            None,
-        )),
-        case: TrivialItem::new("Clutch Case".into(), CLUTCH_CASE_IMG.to_string(), None),
+        key: Some(TrivialItem::new("Clutch Case Key", CLUTCH_CASE_KEY_IMG, None)),
+        case: TrivialItem::new("Clutch Case", CLUTCH_CASE_IMG, None),
         item: STUB_ITEM.clone(),
         item_value,
 
@@ -147,10 +143,10 @@ pub async fn handle_state(_h: &Handler, req: Request<Body>) -> Result<Response<B
         name: "denbeigh".into(),
         item: STUB_ITEM.clone(),
         item_value,
-        case: TrivialItem::new("Clutch Case".into(), CLUTCH_CASE_IMG.to_string(), None),
+        case: TrivialItem::new("Clutch Case", CLUTCH_CASE_IMG, None),
         key: Some(TrivialItem::new(
-            "Clutch Case Key".into(),
-            CLUTCH_CASE_KEY_IMG.to_string(),
+            "Clutch Case Key",
+            CLUTCH_CASE_KEY_IMG,
             None,
         )),
 

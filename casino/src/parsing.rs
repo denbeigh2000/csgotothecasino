@@ -20,7 +20,13 @@ pub struct TrivialItem {
 }
 
 impl TrivialItem {
-    pub fn new(name: String, image_url: String, color: Option<String>) -> Self {
+    pub fn new<S1, S2>(name: S1, image_url: S2, color: Option<String>) -> Self
+    where
+        S1: Into<String>,
+        S2: Into<String>,
+    {
+        let name = name.into();
+        let image_url = image_url.into();
         Self {
             name,
             image_url,

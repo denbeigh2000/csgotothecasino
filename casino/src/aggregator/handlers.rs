@@ -37,8 +37,23 @@ impl Handler {
     }
 
     pub async fn save(&self, items: &[UnhydratedUnlock]) -> Result<(), Infallible> {
+        let urls: Vec<&str> = items.iter().map(|i| i.item_market_link.as_str()).collect();
+        let mut float_info = self.csgofloat_client.get_bulk(&urls).await.unwrap();
+
         for item in items {
-            self.store.append_entry(item).await?;
+            let pricing = self.market_price_client.get(&item.item_market_name).await.unwrap();
+            let hydrated = Unlock {
+                key: item.key.clone(),
+                case: item.case.clone(),
+                item: float_info.get(&item.item_market_link).unwrap().clone(),
+
+                item_value: pricing,
+                at: item.at,
+                name: item.name.clone(),
+            };
+
+            self.store.append_entry(item).await.unwrap();
+            self.store.publish(&hydrated).await.unwrap();
         }
 
         Ok(())
@@ -46,6 +61,10 @@ impl Handler {
 
     pub async fn get_state(&self) -> Result<Vec<Unlock>, Infallible> {
         let state = self.store.get_entries().await?;
+        if state.is_empty() {
+            return Ok(vec![]);
+        }
+
         let urls: Vec<&str> = state.iter().map(|e| e.item_market_link.as_ref()).collect();
 
         let mut csgofloat_info = self.csgofloat_client.get_bulk(&urls).await?;
@@ -56,7 +75,8 @@ impl Handler {
                 .get(&entry.item_market_name)
                 .await
                 .unwrap();
-            let f = csgofloat_info.remove(&entry.item_market_link).unwrap();
+
+            let f = csgofloat_info.get(&entry.item_market_link).unwrap().clone();
 
             entries.push(Unlock {
                 key: entry.key,

@@ -8,7 +8,7 @@ use tokio::time::interval;
 use crate::steam::{SteamClient, SteamCredentials, UnhydratedUnlock};
 
 lazy_static::lazy_static! {
-    static ref COLLECTION_URL: Url = "https://127.0.0.1/upload".parse().unwrap();
+    static ref COLLECTION_URL: Url = "https://127.0.0.1:7000/upload".parse().unwrap();
     static ref POLL_INTERVAL: Duration = Duration::from_secs(60);
 }
 

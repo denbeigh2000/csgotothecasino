@@ -48,9 +48,27 @@ impl<T: DeserializeOwned + Serialize> Cache<T> {
     }
 
     pub async fn get_bulk(&self, keys: &[&str]) -> Result<HashMap<String, T>, Infallible> {
+        // NOTE: We defer to the singular variety here if we have a single item
+        // to retreieve, because redis-rs' internal implementation can't
+        // distinguish between a single item and a single-len vec, meaning it
+        // issues a GET instead of an MGET, and returns a non-vec response.
+        if keys.is_empty() {
+            return Ok(HashMap::new());
+        } else if keys.len() == 1 {
+            let i = keys.get(0).unwrap();
+            return match self.get(i).await? {
+                None => Ok(HashMap::new()),
+                Some(r) => {
+                    let mut m = HashMap::with_capacity(1);
+                    m.insert(i.to_string(), r);
+                    Ok(m)
+                }
+            }
+        }
+
         let mut conn = self.get_conn().await?;
         let redis_keys: Vec<String> = keys.iter().map(|k| self.format_key(k)).collect();
-        let raw_results: Vec<Option<Vec<u8>>> = conn.get(&redis_keys).await.unwrap();
+        let raw_results: Vec<Option<String>> = conn.get(redis_keys).await.unwrap();
 
         let results =
             raw_results
@@ -58,7 +76,7 @@ impl<T: DeserializeOwned + Serialize> Cache<T> {
                 .zip(keys.iter())
                 .fold(HashMap::new(), |mut acc, (raw, key)| {
                     if let Some(r) = raw {
-                        let parsed: T = serde_json::from_slice(&r).unwrap();
+                        let parsed: T = serde_json::from_str(&r).unwrap();
                         acc.insert(key.to_string(), parsed);
                     }
 

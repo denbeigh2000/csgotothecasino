@@ -4,6 +4,7 @@ use std::{collections::HashMap, convert::Infallible, fmt::Display, sync::Arc};
 use bb8_redis::{bb8::Pool, RedisConnectionManager, redis::{IntoConnectionInfo, RedisError}};
 use hyper::Body;
 use reqwest::{Client, StatusCode};
+use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
 use serde::{Deserialize, Serialize};
 use serde_repr::Deserialize_repr;
 
@@ -11,7 +12,7 @@ use crate::cache::Cache;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Sticker {
-    #[serde(rename(deserialize = "stickerId"))]
+    #[serde(alias = "stickerId")]
     sticker_id: u32,
     slot: u8,
     codename: String,
@@ -31,18 +32,18 @@ pub struct ItemDescription {
     rarity: u32,
     a: String,
     d: String,
-    #[serde(rename(deserialize = "paintseed"))]
+    #[serde(alias = "paintseed")]
     paint_seed: u32,
-    #[serde(rename(deserialize = "defindex"))]
+    #[serde(alias = "defindex")]
     def_index: u32,
     stickers: Vec<Sticker>,
-    #[serde(rename(deserialize = "floatid"))]
+    #[serde(alias = "floatid")]
     float_id: String,
-    #[serde(rename(deserialize = "floatvalue"))]
+    #[serde(alias = "floatvalue")]
     float_value: f32,
     s: String,
     m: String,
-    #[serde(rename(deserialize = "imageurl"))]
+    #[serde(alias = "imageurl")]
     image_url: String,
     min: f32,
     max: f32,
@@ -121,10 +122,11 @@ impl From<reqwest::Error> for CsgoFloatFetchError {
 
 pub async fn get_by_market_url(
     client: &Client,
+    key: &str,
     market_url: &str,
 ) -> Result<ItemDescription, CsgoFloatFetchError> {
     let url = format!("https://api.csgofloat.com?url={}", market_url);
-    let resp = client.get(url).send().await?;
+    let resp = client.get(url).header(AUTHORIZATION, key).send().await?;
 
     match resp.status() {
         StatusCode::OK => {
@@ -150,7 +152,8 @@ struct BulkRequest {
 
 pub async fn get_bulk_by_market_url(
     client: &Client,
-    urls: &Vec<&str>,
+    key: &str,
+    urls: &[&str],
 ) -> Result<HashMap<String, ItemDescription>, CsgoFloatFetchError> {
     let url_map: HashMap<String, String> = urls.iter().fold(HashMap::new(), |mut acc, url| {
         let key = url
@@ -175,9 +178,13 @@ pub async fn get_bulk_by_market_url(
     let bulk_req = BulkRequest { links };
     let req_data = serde_json::to_vec(&bulk_req).unwrap();
 
-    let resp: HashMap<String, ItemDescription> = client
+    let req = client
         .post("https://api.csgofloat.com/bulk")
-        .body(Body::from(req_data))
+        .header(CONTENT_TYPE, "application/json")
+        .header(AUTHORIZATION, key)
+        .body(Body::from(req_data));
+
+    let resp: HashMap<String, ItemDescription> = req
         .send()
         .await
         .unwrap()
@@ -198,12 +205,13 @@ pub async fn get_bulk_by_market_url(
 }
 
 pub struct CsgoFloatClient {
+    key: String,
     cache: Cache<ItemDescription>,
     client: Client,
 }
 
 impl CsgoFloatClient {
-    pub async fn new<T: IntoConnectionInfo>(i: T) -> Result<Self, RedisError> {
+    pub async fn new<S: Into<String>, T: IntoConnectionInfo>(key: S, i: T) -> Result<Self, RedisError> {
 
         let conn_info = i.into_connection_info()?;
         let mgr = RedisConnectionManager::new(conn_info.clone())?;
@@ -212,7 +220,9 @@ impl CsgoFloatClient {
         let cache = Cache::new(pool, "floatcache".to_string());
         let client = Client::new();
 
-        Ok(Self { cache, client })
+        let key = key.into();
+
+        Ok(Self { key, cache, client })
     }
 
     pub async fn get(&self, url: &str) -> Result<ItemDescription, Infallible> {
@@ -220,7 +230,7 @@ impl CsgoFloatClient {
             return Ok(entry);
         }
 
-        let res = get_by_market_url(&self.client, url).await.unwrap();
+        let res = get_by_market_url(&self.client, &self.key, url).await.unwrap();
         self.cache.set(url, &res).await?;
 
         Ok(res)
@@ -233,16 +243,19 @@ impl CsgoFloatClient {
         let res = self.cache.get_bulk(urls).await?;
         let missing: Vec<&str> = urls
             .iter()
-            .filter(|u| res.contains_key(**u))
-            .map(|u| *u)
+            .filter(|u| !res.contains_key(**u))
+            .copied()
             .collect();
+
         if missing.is_empty() {
             return Ok(res);
         }
 
-        let fresh = get_bulk_by_market_url(&self.client, &missing)
-            .await
-            .unwrap();
+        let mut fresh = HashMap::with_capacity(missing.len());
+        for item in missing {
+            let desc = get_by_market_url(&self.client, &self.key, item).await.unwrap();
+            fresh.insert(item.to_string(), desc);
+        }
 
         self.cache.set_bulk(&fresh).await.unwrap();
         let res = fresh.into_iter().fold(res, |mut acc, (k, v)| {
