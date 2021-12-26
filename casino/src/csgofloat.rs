@@ -111,17 +111,31 @@ impl Display for CsgoFloatErrorCode {
 pub enum CsgoFloatFetchError {
     CsgoFloat(CsgoFloatError),
     Transport(reqwest::Error),
-    Deserializing,
+    Deserializing(serde_json::Error),
+    SteamURLFormat(SteamURLParseError),
+}
+
+impl From<SteamURLParseError> for CsgoFloatFetchError {
+    fn from(e: SteamURLParseError) -> Self {
+        Self::SteamURLFormat(e)
+    }
+}
+
+#[derive(Debug)]
+pub enum SteamURLParseError {
+    MissingAssetMarker,
+    MissingDMarker,
 }
 
 impl From<reqwest::Error> for CsgoFloatFetchError {
     fn from(e: reqwest::Error) -> Self {
-        if e.is_decode() {
-            eprintln!("Error deserializing JSON response: {}", e);
-            Self::Deserializing
-        } else {
-            Self::Transport(e)
-        }
+        Self::Transport(e)
+    }
+}
+
+impl From<serde_json::Error> for CsgoFloatFetchError {
+    fn from(e: serde_json::Error) -> Self {
+        Self::Deserializing(e)
     }
 }
 
@@ -160,19 +174,19 @@ pub async fn get_bulk_by_market_url(
     key: &str,
     urls: &[&str],
 ) -> Result<HashMap<String, ItemDescription>, CsgoFloatFetchError> {
-    let url_map: HashMap<String, String> = urls.iter().fold(HashMap::new(), |mut acc, url| {
+    let url_map: HashMap<String, String> = urls.iter().try_fold(HashMap::new(), |mut acc, url| {
         let key = url
             .split('A')
             .nth(1)
-            .unwrap()
+            .ok_or(SteamURLParseError::MissingAssetMarker)?
             .split('D')
             .next()
-            .unwrap()
+            .ok_or(SteamURLParseError::MissingDMarker)?
             .to_string();
         acc.insert(url.to_string(), key);
 
-        acc
-    });
+        Ok::<_, SteamURLParseError>(acc)
+    })?;
 
     let links = urls
         .iter()
@@ -181,7 +195,7 @@ pub async fn get_bulk_by_market_url(
         })
         .collect();
     let bulk_req = BulkRequest { links };
-    let req_data = serde_json::to_vec(&bulk_req).unwrap();
+    let req_data = serde_json::to_vec(&bulk_req)?;
 
     let req = client
         .post("https://api.csgofloat.com/bulk")
@@ -189,7 +203,8 @@ pub async fn get_bulk_by_market_url(
         .header(AUTHORIZATION, key)
         .body(Body::from(req_data));
 
-    let resp: HashMap<String, ItemDescription> = req.send().await.unwrap().json().await.unwrap();
+    let body = req.send().await?.bytes().await?;
+    let resp: HashMap<String, ItemDescription> = serde_json::from_slice(&body)?;
 
     let items_by_url = url_map
         .into_iter()
@@ -226,15 +241,19 @@ impl CsgoFloatClient {
         Ok(Self { key, cache, client })
     }
 
-    pub async fn get(&self, url: &str) -> Result<ItemDescription, Infallible> {
-        if let Some(entry) = self.cache.get(url).await.unwrap() {
-            return Ok(entry);
-        }
+    pub async fn get(&self, url: &str) -> Result<ItemDescription, CsgoFloatFetchError> {
+        match self.cache.get(url).await {
+            Ok(Some(entry)) => return Ok(entry),
+            Ok(None) => (),
+            Err(e) => eprintln!("error fetching from cache: {:?}", e),
+        };
 
-        let res = get_by_market_url(&self.client, &self.key, url)
-            .await
-            .unwrap();
-        self.cache.set(url, &res).await?;
+
+        let res = get_by_market_url(&self.client, &self.key, url).await?;
+
+        if let Err(e) = self.cache.set(url, &res).await {
+            eprintln!("failed to set cache entry: {:?}", e);
+        }
 
         Ok(res)
     }
@@ -242,8 +261,11 @@ impl CsgoFloatClient {
     pub async fn get_bulk(
         &self,
         urls: &[&str],
-    ) -> Result<HashMap<String, ItemDescription>, Infallible> {
-        let res = self.cache.get_bulk(urls).await?;
+    ) -> Result<HashMap<String, ItemDescription>, CsgoFloatFetchError> {
+        let res = self.cache.get_bulk(urls).await.unwrap_or_else(|e| {
+            eprintln!("failed to get items from cache: {:?}", e);
+            HashMap::with_capacity(0)
+        });
         let missing: Vec<&str> = urls
             .iter()
             .filter(|u| !res.contains_key(**u))
@@ -256,13 +278,14 @@ impl CsgoFloatClient {
 
         let mut fresh = HashMap::with_capacity(missing.len());
         for item in missing {
-            let desc = get_by_market_url(&self.client, &self.key, item)
-                .await
-                .unwrap();
+            let desc = get_by_market_url(&self.client, &self.key, item).await?;
             fresh.insert(item.to_string(), desc);
         }
 
-        self.cache.set_bulk(&fresh).await.unwrap();
+        if let Err(e) = self.cache.set_bulk(&fresh).await {
+            eprintln!("failed to set items in cache: {:?}", e);
+        }
+
         let res = fresh.into_iter().fold(res, |mut acc, (k, v)| {
             acc.insert(k, v);
             acc
