@@ -5,21 +5,57 @@ use hyper_tungstenite::hyper::{Body, Method, Request, Response, StatusCode};
 use hyper_tungstenite::tungstenite::Message;
 use hyper_tungstenite::{is_upgrade_request, HyperWebsocket};
 
-use crate::csgofloat::CsgoFloatClient;
+use crate::csgofloat::{CsgoFloatClient, CsgoFloatFetchError};
+use crate::steam::errors::MarketPriceFetchError;
 use crate::steam::{MarketPriceClient, UnhydratedUnlock, Unlock};
-use crate::store::Store;
+use crate::store::{Store, StoreError};
 
 use super::http::resp_400;
 use super::websocket::{handle_emit, handle_recv};
+
+#[derive(Debug)]
+pub enum HandlerError {
+    Transport(hyper::Error),
+    Store(StoreError),
+    MarketPrice(MarketPriceFetchError),
+    CsgoFloat(CsgoFloatFetchError),
+    Serde(serde_json::Error),
+}
+
+impl From<StoreError> for HandlerError {
+    fn from(e: StoreError) -> Self {
+        Self::Store(e)
+    }
+}
+
+impl From<MarketPriceFetchError> for HandlerError {
+    fn from(e: MarketPriceFetchError) -> Self {
+        Self::MarketPrice(e)
+    }
+}
+
+impl From<CsgoFloatFetchError> for HandlerError {
+    fn from(e: CsgoFloatFetchError) -> Self {
+        Self::CsgoFloat(e)
+    }
+}
+
+impl From<serde_json::Error> for HandlerError {
+    fn from(e: serde_json::Error) -> Self {
+        Self::Serde(e)
+    }
+}
+
+impl From<hyper::Error> for HandlerError {
+    fn from(e: hyper::Error) -> Self {
+        Self::Transport(e)
+    }
+}
 
 pub struct Handler {
     store: Store,
     csgofloat_client: CsgoFloatClient,
     market_price_client: MarketPriceClient,
-}
-
-pub fn new_handler_unimplemented() -> Handler {
-    todo!()
 }
 
 impl Handler {
@@ -35,16 +71,12 @@ impl Handler {
         }
     }
 
-    pub async fn save(&self, items: &[UnhydratedUnlock]) -> Result<(), Infallible> {
+    pub async fn save(&self, items: &[UnhydratedUnlock]) -> Result<(), HandlerError> {
         let urls: Vec<&str> = items.iter().map(|i| i.item_market_link.as_str()).collect();
-        let float_info = self.csgofloat_client.get_bulk(&urls).await.unwrap();
+        let float_info = self.csgofloat_client.get_bulk(&urls).await?;
 
         for item in items {
-            let pricing = self
-                .market_price_client
-                .get(&item.item_market_name)
-                .await
-                .unwrap();
+            let pricing = self.market_price_client.get(&item.item_market_name).await?;
             let hydrated = Unlock {
                 key: item.key.clone(),
                 case: item.case.clone(),
@@ -55,14 +87,14 @@ impl Handler {
                 name: item.name.clone(),
             };
 
-            self.store.append_entry(item).await.unwrap();
-            self.store.publish(&hydrated).await.unwrap();
+            self.store.append_entry(item).await?;
+            self.store.publish(&hydrated).await?;
         }
 
         Ok(())
     }
 
-    pub async fn get_state(&self) -> Result<Vec<Unlock>, Infallible> {
+    pub async fn get_state(&self) -> Result<Vec<Unlock>, HandlerError> {
         let state = self.store.get_entries().await?;
         if state.is_empty() {
             return Ok(vec![]);
@@ -76,8 +108,7 @@ impl Handler {
             let p = self
                 .market_price_client
                 .get(&entry.item_market_name)
-                .await
-                .unwrap();
+                .await?;
 
             let f = csgofloat_info.get(&entry.item_market_link).unwrap().clone();
 
@@ -95,20 +126,20 @@ impl Handler {
         Ok(entries)
     }
 
-    pub async fn event_stream(&self) -> Result<impl Stream<Item = Unlock>, Infallible> {
-        let stream = self.store.get_event_stream().await.unwrap();
+    pub async fn event_stream(&self) -> Result<impl Stream<Item = Unlock>, HandlerError> {
+        let stream = self.store.get_event_stream().await?;
 
         Ok(stream)
     }
 }
 
-pub async fn handle_state(h: &Handler, req: Request<Body>) -> Result<Response<Body>, Infallible> {
+pub async fn handle_state(h: &Handler, req: Request<Body>) -> Result<Response<Body>, HandlerError> {
     if req.method() != Method::GET {
         return Ok(resp_400());
     }
 
-    let state = h.get_state().await.unwrap();
-    let state_data = serde_json::to_vec(&state).unwrap();
+    let state = h.get_state().await?;
+    let state_data = serde_json::to_vec(&state)?;
     let resp = Response::builder().body(Body::from(state_data)).unwrap();
 
     Ok(resp)
@@ -117,13 +148,13 @@ pub async fn handle_state(h: &Handler, req: Request<Body>) -> Result<Response<Bo
 pub async fn handle_upload(
     h: &Handler,
     mut req: Request<Body>,
-) -> Result<Response<Body>, Infallible> {
+) -> Result<Response<Body>, HandlerError> {
     if req.method() != Method::POST {
         eprintln!("bad request type");
         return Ok(resp_400());
     }
 
-    let data = hyper::body::to_bytes(req.body_mut()).await.unwrap();
+    let data = hyper::body::to_bytes(req.body_mut()).await?;
     let unlock: Vec<UnhydratedUnlock> = match serde_json::from_slice(&data) {
         Ok(u) => u,
         Err(e) => {
@@ -135,7 +166,7 @@ pub async fn handle_upload(
     let status = match h.save(&unlock).await {
         Ok(_) => StatusCode::OK,
         Err(e) => {
-            eprintln!("saving failed: {}", e);
+            eprintln!("saving failed: {:?}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         }
     };
@@ -157,7 +188,7 @@ pub async fn handle_websocket(
     }
 
     let (resp, socket) = hyper_tungstenite::upgrade(req, None).unwrap();
-    let stream = h.event_stream().await?;
+    let stream = h.event_stream().await.unwrap();
     tokio::spawn(handle_upgraded_websocket(Box::pin(stream), socket));
 
     Ok(resp)

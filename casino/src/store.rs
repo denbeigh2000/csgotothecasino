@@ -1,7 +1,6 @@
-use std::convert::Infallible;
 use std::sync::Arc;
 
-use bb8_redis::bb8::{Pool, PooledConnection};
+use bb8_redis::bb8::{Pool, PooledConnection, RunError};
 pub use bb8_redis::redis::aio::Connection;
 use bb8_redis::redis::{from_redis_value, AsyncCommands, Client, FromRedisValue, ToRedisArgs};
 pub use bb8_redis::redis::{IntoConnectionInfo, RedisError};
@@ -60,8 +59,36 @@ impl ToRedisArgs for Unlock {
     }
 }
 
+#[derive(Debug)]
+pub enum StoreError {
+    ConnectionTimeout,
+    RedisError(RedisError),
+    SerdeError(serde_json::Error),
+}
+
+impl From<RunError<RedisError>> for StoreError {
+    fn from(e: RunError<RedisError>) -> Self {
+        match e {
+            RunError::User(e) => Self::RedisError(e),
+            RunError::TimedOut => Self::ConnectionTimeout,
+        }
+    }
+}
+
+impl From<RedisError> for StoreError {
+    fn from(e: RedisError) -> Self {
+        Self::RedisError(e)
+    }
+}
+
+impl From<serde_json::Error> for StoreError {
+    fn from(e: serde_json::Error) -> Self {
+        Self::SerdeError(e)
+    }
+}
+
 impl Store {
-    pub async fn new<T: IntoConnectionInfo>(i: T) -> Result<Self, RedisError> {
+    pub async fn new<T: IntoConnectionInfo>(i: T) -> Result<Self, StoreError> {
         let conn_info = i.into_connection_info()?;
         let mgr = RedisConnectionManager::new(conn_info.clone())?;
         let pool = Arc::new(bb8_redis::bb8::Pool::builder().build(mgr).await?);
@@ -76,35 +103,35 @@ impl Store {
 
     async fn get_conn<'a, 'b>(
         &'a self,
-    ) -> Result<PooledConnection<'b, RedisConnectionManager>, Infallible>
+    ) -> Result<PooledConnection<'b, RedisConnectionManager>, StoreError>
     where
         'a: 'b,
     {
-        Ok(self.pool.get().await.unwrap())
+        Ok(self.pool.get().await?)
     }
 
-    pub async fn get_entries(&self) -> Result<Vec<UnhydratedUnlock>, Infallible> {
+    pub async fn get_entries(&self) -> Result<Vec<UnhydratedUnlock>, StoreError> {
         let mut conn = self.get_conn().await?;
-        let res: Option<Vec<UnhydratedUnlock>> = conn.lrange("unlocks", 0, -1).await.unwrap();
+        let res: Option<Vec<UnhydratedUnlock>> = conn.lrange("unlocks", 0, -1).await?;
 
         Ok(res.unwrap_or_else(Vec::new))
     }
 
-    pub async fn append_entry(&self, entry: &UnhydratedUnlock) -> Result<(), RedisError> {
-        let mut conn = self.get_conn().await.unwrap();
+    pub async fn append_entry(&self, entry: &UnhydratedUnlock) -> Result<(), StoreError> {
+        let mut conn = self.get_conn().await?;
         let _res: () = conn.lpush("unlocks", entry).await?;
 
         Ok(())
     }
 
-    pub async fn publish(&self, entry: &Unlock) -> Result<(), RedisError> {
-        let mut conn = self.get_conn().await.unwrap();
+    pub async fn publish(&self, entry: &Unlock) -> Result<(), StoreError> {
+        let mut conn = self.get_conn().await?;
         let _res: () = conn.publish(&EVENT_KEY, entry).await?;
 
         Ok(())
     }
 
-    pub async fn get_event_stream(&self) -> Result<impl Stream<Item = Unlock>, RedisError> {
+    pub async fn get_event_stream(&self) -> Result<impl Stream<Item = Unlock>, StoreError> {
         let mut conn = self.make_conn().await?.into_pubsub();
         conn.subscribe(EVENT_KEY).await?;
 

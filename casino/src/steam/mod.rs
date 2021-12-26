@@ -310,7 +310,7 @@ impl SteamClient {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MarketPrices {
     #[serde(deserialize_with = "deserialize_number_from_string")]
     lowest_price: f32,
