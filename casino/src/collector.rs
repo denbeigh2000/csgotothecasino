@@ -44,7 +44,7 @@ impl Collector {
         loop {
             tokio::select! {
                 _ = tick.tick() => self.poll().await?,
-                // TODO: Detect ctrl-c?
+                _ = tokio::signal::ctrl_c() => return Ok(()),
             }
         }
     }
