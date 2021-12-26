@@ -7,18 +7,19 @@ pub use crate::csgofloat::ItemDescription;
 use crate::steam::errors::{FetchItemsError, FetchNewUnpreparedItemsError, PrepareItemsError};
 pub use crate::steam::parsing::TrivialItem;
 use crate::steam::parsing::{
-    parse_raw_unlock, InventoryId, ParseSuccess, RawUnlock, TRADE_SELECTOR,
+    is_authenticated, parse_raw_unlock, InventoryId, ParseSuccess, RawUnlock, TRADE_SELECTOR,
 };
 
 use bb8_redis::bb8::Pool;
 use bb8_redis::redis::{IntoConnectionInfo, RedisError};
 use bb8_redis::RedisConnectionManager;
 use chrono::{DateTime, Utc};
-use reqwest::cookie::Jar;
 use reqwest::{Client, Request, StatusCode, Url};
 use scraper::Html;
 use serde::{Deserialize, Serialize};
 use serde_aux::field_attributes::deserialize_number_from_string;
+
+use self::errors::MarketPriceFetchError;
 
 pub mod errors;
 mod parsing;
@@ -66,18 +67,6 @@ impl SteamCredentials {
             self.session_id, self.login_token
         )
     }
-
-    pub fn into_jar(self) -> Jar {
-        let jar = Jar::default();
-        let url = "https://steamcommunity.com".parse().unwrap();
-        let cookie_str = format!(
-            "sessionid={}; steamLoginSecure={}",
-            self.session_id, self.login_token
-        );
-        jar.add_cookie_str(&cookie_str, &url);
-
-        jar
-    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -88,6 +77,7 @@ pub struct Inventory {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct InventoryDescription {
+    #[serde(deserialize_with = "deserialize_number_from_string")]
     #[serde(rename(deserialize = "classid"))]
     pub class_id: u64,
     #[serde(deserialize_with = "deserialize_number_from_string")]
@@ -177,15 +167,6 @@ impl SteamClient {
             .unwrap()
     }
 
-    pub async fn check_authenticated(&self) -> Result<(), Infallible> {
-        let req = self
-            .http_client
-            .execute(self.inv_history_req())
-            .await
-            .unwrap();
-        todo!()
-    }
-
     pub async fn fetch_new_items(
         &self,
         since: Option<&DateTime<Utc>>,
@@ -216,6 +197,10 @@ impl SteamClient {
 
         let data = resp.text().await?;
         let parsed_data = Html::parse_document(&data);
+
+        if !is_authenticated(&parsed_data)? {
+            return Err(FetchNewUnpreparedItemsError::NotAuthenticated);
+        }
 
         let trades = parsed_data.select(&TRADE_SELECTOR);
         let mut seen_any = false;
@@ -325,44 +310,26 @@ impl SteamClient {
     }
 }
 
-#[derive(Clone, Debug, Deserialize)]
-pub struct RawMarketPrices {
-    lowest_price: String,
-    volume: String,
-}
-
-impl TryInto<MarketPrices> for RawMarketPrices {
-    type Error = Infallible;
-
-    fn try_into(self) -> Result<MarketPrices, Self::Error> {
-        let (_, lowest_price_str) = self.lowest_price.split_at(1);
-        let lowest_price: f32 = lowest_price_str.parse().unwrap();
-        let volume: i32 = self.volume.parse().unwrap();
-
-        Ok(MarketPrices {
-            lowest_price,
-            volume,
-        })
-    }
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MarketPrices {
+    #[serde(deserialize_with = "deserialize_number_from_string")]
     lowest_price: f32,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
     volume: i32,
 }
 
 pub async fn get_market_price(
     client: &Client,
     market_name: &str,
-) -> Result<MarketPrices, Infallible> {
+) -> Result<MarketPrices, MarketPriceFetchError> {
     let url = format!(
         "https://steamcommunity.com/market/priceoverview/?appid=730&currency=1&market_hash_name={}",
         market_name
     );
-    let resp: RawMarketPrices = client.get(url).send().await.unwrap().json().await.unwrap();
+    let resp = client.get(url).send().await?.bytes().await?;
+    let parsed: MarketPrices = serde_json::from_slice(&resp)?;
 
-    resp.try_into()
+    Ok(parsed)
 }
 
 pub struct MarketPriceClient {
@@ -382,15 +349,17 @@ impl MarketPriceClient {
         Ok(Self { client, cache })
     }
 
-    pub async fn get(&self, market_name: &str) -> Result<MarketPrices, Infallible> {
-        if let Some(price) = self.cache.get(market_name).await? {
-            return Ok(price);
-        }
+    pub async fn get(&self, market_name: &str) -> Result<MarketPrices, MarketPriceFetchError> {
+        match self.cache.get(market_name).await {
+            Ok(Some(price)) => return Ok(price),
+            Ok(None) => (),
+            Err(e) => eprintln!("failed to read entry from cache: {:?}", e),
+        };
 
         let price = get_market_price(&self.client, market_name).await?;
 
         if let Err(e) = self.cache.set(market_name, &price).await {
-            eprintln!("error updating market cache: {}", e);
+            eprintln!("error updating market cache: {:?}", e);
         }
 
         Ok(price)

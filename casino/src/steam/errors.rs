@@ -1,13 +1,16 @@
 use hyper::StatusCode;
 
-use super::parsing::ParseFailure;
+use super::parsing::{AuthenticationParseError, ParseFailure};
 
+#[derive(Debug)]
 pub enum FetchNewUnpreparedItemsError {
     TransportError(reqwest::Error),
     AuthenticationFailure,
     UnhandledStatusCode(StatusCode),
     NoHistoryFound,
     PageParseError(ParseFailure),
+    AuthenticationParseError(AuthenticationParseError),
+    NotAuthenticated,
 }
 
 impl From<ParseFailure> for FetchNewUnpreparedItemsError {
@@ -16,7 +19,13 @@ impl From<ParseFailure> for FetchNewUnpreparedItemsError {
     }
 }
 
-impl std::fmt::Debug for FetchNewUnpreparedItemsError {
+impl From<AuthenticationParseError> for FetchNewUnpreparedItemsError {
+    fn from(e: AuthenticationParseError) -> Self {
+        Self::AuthenticationParseError(e)
+    }
+}
+
+impl std::fmt::Display for FetchNewUnpreparedItemsError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::TransportError(e) => write!(f, "HTTP error: {}", e),
@@ -24,6 +33,8 @@ impl std::fmt::Debug for FetchNewUnpreparedItemsError {
             Self::UnhandledStatusCode(code) => write!(f, "unhandled status code: {}", code),
             Self::NoHistoryFound => write!(f, "failed to parse any history from steam site"),
             Self::PageParseError(e) => write!(f, "failed to parse inventory history: {}", e),
+            Self::AuthenticationParseError(e) => write!(f, "error finding login state: {}", e),
+            Self::NotAuthenticated => write!(f, "not logged in"),
         }
     }
 }
@@ -61,5 +72,23 @@ pub enum PrepareItemsError {
 impl From<reqwest::Error> for PrepareItemsError {
     fn from(e: reqwest::Error) -> Self {
         Self::FetchingInventoryError(e)
+    }
+}
+
+#[derive(Debug)]
+pub enum MarketPriceFetchError {
+    TransportError(reqwest::Error),
+    DeserializeError(serde_json::Error),
+}
+
+impl From<reqwest::Error> for MarketPriceFetchError {
+    fn from(e: reqwest::Error) -> Self {
+        Self::TransportError(e)
+    }
+}
+
+impl From<serde_json::Error> for MarketPriceFetchError {
+    fn from(e: serde_json::Error) -> Self {
+        Self::DeserializeError(e)
     }
 }

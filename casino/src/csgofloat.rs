@@ -174,19 +174,20 @@ pub async fn get_bulk_by_market_url(
     key: &str,
     urls: &[&str],
 ) -> Result<HashMap<String, ItemDescription>, CsgoFloatFetchError> {
-    let url_map: HashMap<String, String> = urls.iter().try_fold(HashMap::new(), |mut acc, url| {
-        let key = url
-            .split('A')
-            .nth(1)
-            .ok_or(SteamURLParseError::MissingAssetMarker)?
-            .split('D')
-            .next()
-            .ok_or(SteamURLParseError::MissingDMarker)?
-            .to_string();
-        acc.insert(url.to_string(), key);
+    let url_map: HashMap<String, String> =
+        urls.iter().try_fold(HashMap::new(), |mut acc, url| {
+            let key = url
+                .split('A')
+                .nth(1)
+                .ok_or(SteamURLParseError::MissingAssetMarker)?
+                .split('D')
+                .next()
+                .ok_or(SteamURLParseError::MissingDMarker)?
+                .to_string();
+            acc.insert(url.to_string(), key);
 
-        Ok::<_, SteamURLParseError>(acc)
-    })?;
+            Ok::<_, SteamURLParseError>(acc)
+        })?;
 
     let links = urls
         .iter()
@@ -247,7 +248,6 @@ impl CsgoFloatClient {
             Ok(None) => (),
             Err(e) => eprintln!("error fetching from cache: {:?}", e),
         };
-
 
         let res = get_by_market_url(&self.client, &self.key, url).await?;
 

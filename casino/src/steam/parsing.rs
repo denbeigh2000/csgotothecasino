@@ -3,10 +3,14 @@ use std::fmt::{self, Display};
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use regex::Regex;
 use scraper::element_ref::Text;
-use scraper::{ElementRef, Selector};
+use scraper::{ElementRef, Html, Selector};
 use serde::{Deserialize, Serialize};
 
 lazy_static::lazy_static! {
+    pub static ref LOGIN_AREA_SELECTOR: Selector = Selector::parse("#global_actions").unwrap();
+    pub static ref LOGGED_IN_ACTION_SELECTOR: Selector = Selector::parse("#account_pulldown").unwrap();
+    pub static ref LOGGED_OUT_ACTION_SELECTOR: Selector = Selector::parse("#language_pulldown").unwrap();
+
     pub static ref TRADE_SELECTOR: Selector = Selector::parse("div.tradehistoryrow").unwrap();
     pub static ref TRADE_DATE_SELECTOR: Selector = Selector::parse("div.tradehistory_date").unwrap();
     pub static ref DESCRIPTION_SELECTOR: Selector = Selector::parse("div.tradehistory_event_description").unwrap();
@@ -127,6 +131,37 @@ impl Display for TrivialItemParseError {
             Self::ImageURLFormatChanged => write!(f, "image url format has changed"),
         }
     }
+}
+
+#[derive(Debug)]
+pub enum AuthenticationParseError {
+    MissingSteamLoginArea,
+    MissingLoginOrUserInfo,
+}
+
+impl Display for AuthenticationParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::MissingSteamLoginArea => write!(f, "could not find login area on page"),
+            Self::MissingLoginOrUserInfo => write!(f, "found login area, but not indicator"),
+        }
+    }
+}
+
+pub fn is_authenticated(page: &Html) -> Result<bool, AuthenticationParseError> {
+    let login_area = page
+        .select(&LOGIN_AREA_SELECTOR)
+        .next()
+        .ok_or(AuthenticationParseError::MissingSteamLoginArea)?;
+
+    if let Some(_) = login_area.select(&LOGGED_IN_ACTION_SELECTOR).next() {
+        return Ok(true);
+    }
+    if let Some(_) = login_area.select(&LOGGED_OUT_ACTION_SELECTOR).next() {
+        return Ok(false);
+    }
+
+    return Err(AuthenticationParseError::MissingLoginOrUserInfo);
 }
 
 pub fn parse_raw_unlock(
