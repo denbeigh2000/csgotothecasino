@@ -1,12 +1,8 @@
-FROM rust:1.57-slim-buster AS builder
+FROM denbeigh2000/casino:base AS base
 
-RUN apt-get update && apt-get install -y pkg-config libssl-dev
+ARG CARGO_ARGS=""
 
-WORKDIR /usr/src/casino
-COPY Cargo.lock Cargo.toml /usr/src/casino/
-COPY src /usr/src/casino/src
-
-RUN cargo build --bin aggregator
+RUN cargo build --bin aggregator $CARGO_ARGS
 
 FROM debian:buster-slim
 
@@ -14,5 +10,6 @@ RUN apt-get update && apt-get install -y pkg-config libssl-dev
 
 EXPOSE 7000
 
-COPY --from=builder /usr/src/casino/target/debug/aggregator /usr/local/bin/aggregator
+COPY --from=base /usr/src/casino/target/debug/aggregator /usr/local/bin/aggregator
 CMD ["/usr/local/bin/aggregator"]
+

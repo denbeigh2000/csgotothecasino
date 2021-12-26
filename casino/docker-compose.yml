@@ -1,0 +1,22 @@
+version: "3.8"
+
+services:
+  aggregator:
+    image: denbeigh2000/casino:aggregator
+    build:
+      args:
+        CARGO_ARGS: "--features=not-stub"
+      context: .
+      dockerfile: Dockerfile
+    stop_signal: SIGINT
+    environment:
+      REDIS_URL: "redis://redis/"
+    env_file: secrets.env
+    ports:
+      - target: 7000
+        published: 7000
+        host_ip: 127.0.0.1
+        protocol: tcp
+
+  redis:
+    image: redis:6

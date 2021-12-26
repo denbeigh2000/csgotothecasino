@@ -30,6 +30,12 @@ lazy_static::lazy_static! {
     static ref ROUTER: Router<Route> = router();
 }
 
+async fn ctrl_c() {
+    tokio::signal::ctrl_c().await.unwrap();
+
+    eprintln!("shutting down");
+}
+
 pub async fn serve<F, Fut>(make_handler: F) -> Result<(), Infallible>
 where
     Fut: Future<Output = Handler> + Send + 'static,
@@ -50,7 +56,11 @@ where
     });
 
     let addr = "0.0.0.0:7000".parse().unwrap();
-    hyper::Server::bind(&addr).serve(svc).await.unwrap();
+    hyper::Server::bind(&addr)
+        .serve(svc)
+        .with_graceful_shutdown(ctrl_c())
+        .await
+        .unwrap();
 
     Ok(())
 }
