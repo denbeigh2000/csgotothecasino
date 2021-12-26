@@ -9,14 +9,14 @@ use crate::steam::{SteamClient, SteamCredentials, UnhydratedUnlock};
 
 lazy_static::lazy_static! {
     static ref COLLECTION_URL: Url = "https://127.0.0.1:7000/upload".parse().unwrap();
-    static ref POLL_INTERVAL: Duration = Duration::from_secs(60);
+    static ref POLL_INTERVAL: Duration = Duration::from_secs(30);
 }
 
 pub struct Collector {
     steam_client: SteamClient,
-    http_client: Client,
 
     last_unboxing: Option<DateTime<Utc>>,
+    last_parsed_history_id: Option<String>,
 }
 
 impl Collector {
@@ -26,13 +26,12 @@ impl Collector {
         creds: SteamCredentials,
         start_time: Option<DateTime<Utc>>,
     ) -> Result<Self, Infallible> {
-        let http_client = Client::new();
         let steam_client = SteamClient::new(steam_username, steam_id, creds).unwrap();
         Ok(Self {
             steam_client,
-            http_client,
 
             last_unboxing: start_time,
+            last_parsed_history_id: None,
         })
     }
 
@@ -49,15 +48,17 @@ impl Collector {
 
     async fn poll(&mut self) -> Result<(), Infallible> {
         let since = self.last_unboxing.as_ref();
-        let new_items = self.steam_client.fetch_new_items(since).await.unwrap();
+        let last_id = self.last_parsed_history_id.as_deref();
+        let mut new_items = self.steam_client.fetch_new_items(since, last_id).await.unwrap();
 
         if new_items.is_empty() {
             return Ok(());
         }
 
         self.send_results(&new_items).await?;
-        let last = new_items.get(0).unwrap().at;
-        self.last_unboxing = Some(last);
+        let last = new_items.remove(0);
+        self.last_unboxing = Some(last.at);
+        self.last_parsed_history_id = Some(last.history_id);
 
         Ok(())
     }

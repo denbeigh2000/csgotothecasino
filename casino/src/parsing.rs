@@ -1,4 +1,5 @@
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
+use regex::Regex;
 use scraper::{ElementRef, Selector};
 use serde::{Deserialize, Serialize};
 
@@ -10,6 +11,8 @@ lazy_static::lazy_static! {
     pub static ref TRADE_ITEM_SELECTOR: Selector = Selector::parse(".history_item").unwrap();
     pub static ref TRADE_ITEM_IMG_SELECTOR: Selector = Selector::parse("img.tradehistory_received_item_img").unwrap();
     pub static ref TRADE_ITEM_NAME_SELECTOR: Selector = Selector::parse("span.history_item_name").unwrap();
+
+    pub static ref HISTORY_ID_REGEX: Regex = Regex::new(r"^history([0-9a-f]{40})_.+").unwrap();
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -42,6 +45,8 @@ pub struct InventoryId {
 }
 
 pub struct RawUnlock {
+    pub history_id: String,
+
     pub case: TrivialItem,
     pub key: Option<TrivialItem>,
     pub item: InventoryId,
@@ -56,7 +61,7 @@ pub enum ParseResult {
     Unparseable,
 }
 
-pub fn parse_raw_unlock(trade: ElementRef<'_>, since: Option<&DateTime<Utc>>) -> ParseResult {
+pub fn parse_raw_unlock(trade: ElementRef<'_>, since: Option<&DateTime<Utc>>, last_seen_id: Option<&str>) -> ParseResult {
     let desc = match trade.select(&DESCRIPTION_SELECTOR).next() {
         Some(d) => d,
         // TODO: Should convey more info
@@ -106,7 +111,19 @@ pub fn parse_raw_unlock(trade: ElementRef<'_>, since: Option<&DateTime<Utc>>) ->
     let gained_items = sides.next().unwrap();
     let gained_item = gained_items.select(&TRADE_ITEM_SELECTOR).next().unwrap();
 
+    let history_id_attr = case_node.value().id().unwrap();
+    let history_id = match HISTORY_ID_REGEX.captures(history_id_attr) {
+        Some(captures) => captures.get(1).unwrap().as_str(),
+        None => return ParseResult::Unparseable,
+    };
+
+    if last_seen_id.map(|l| l == history_id).unwrap_or(false) {
+        return ParseResult::TooOld;
+    }
+
     ParseResult::Success(RawUnlock {
+        history_id: history_id.to_string(),
+
         case: item_from_node(case_node),
         key: key_node.map(item_from_node),
         item: inv_id_from_node(gained_item),

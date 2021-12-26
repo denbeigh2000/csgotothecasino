@@ -14,11 +14,14 @@ use chrono::{DateTime, Utc};
 use reqwest::cookie::Jar;
 use reqwest::{Client, Request, StatusCode, Url};
 use scraper::Html;
-use serde::Deserialize;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use serde_aux::field_attributes::deserialize_number_from_string;
+use serde_aux::field_attributes;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UnhydratedUnlock {
+    pub history_id: String,
+
     pub key: Option<TrivialItem>,
     pub case: TrivialItem,
     pub item_market_link: String,
@@ -120,12 +123,16 @@ pub struct InventoryDescription {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Asset {
+    #[serde(deserialize_with = "deserialize_number_from_string")]
     #[serde(rename(deserialize = "appid"))]
     app_id: u32,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
     #[serde(rename(deserialize = "assetid"))]
     asset_id: u64,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
     #[serde(rename(deserialize = "classid"))]
     class_id: u64,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
     #[serde(rename(deserialize = "instanceid"))]
     instance_id: u64,
 }
@@ -189,15 +196,20 @@ impl SteamClient {
     }
 
     pub async fn check_authenticated(&self) -> Result<(), Infallible> {
-        let req = self.http_client.execute(self.inv_history_req()).await.unwrap();
+        let req = self
+            .http_client
+            .execute(self.inv_history_req())
+            .await
+            .unwrap();
         todo!()
     }
 
     pub async fn fetch_new_items(
         &self,
         since: Option<&DateTime<Utc>>,
+        last_id: Option<&str>,
     ) -> Result<Vec<UnhydratedUnlock>, FetchNewItemsError> {
-        let unhydrated = self.fetch_new_unprepared_items(since).await?;
+        let unhydrated = self.fetch_new_unprepared_items(since, last_id).await?;
         Ok(self
             .prepare_unlocks(unhydrated, self.username.clone())
             .await
@@ -207,6 +219,7 @@ impl SteamClient {
     async fn fetch_new_unprepared_items(
         &self,
         since: Option<&DateTime<Utc>>,
+        last_id: Option<&str>,
     ) -> Result<Vec<RawUnlock>, FetchNewItemsError> {
         let resp = self.http_client.execute(self.inv_history_req()).await?;
 
@@ -227,7 +240,7 @@ impl SteamClient {
         let mut unlocks: Vec<RawUnlock> = Vec::new();
 
         for trade in trades {
-            match parse_raw_unlock(trade, since) {
+            match parse_raw_unlock(trade, since, last_id) {
                 ParseResult::Success(v) => unlocks.push(v),
                 ParseResult::TooOld => return Ok(unlocks),
                 ParseResult::Unparseable => panic!("failed to parse html??"),
@@ -308,10 +321,13 @@ impl SteamClient {
                     .replacen("%assetid%", &item_asset.asset_id.to_string(), 1)
                     .replacen("%owner_steamid%", &self.user_id.to_string(), 1);
 
+                let history_id = i.history_id;
                 let at = i.at;
                 let name = name.clone();
 
                 UnhydratedUnlock {
+                    history_id,
+
                     key,
                     case,
                     item_market_link,
