@@ -5,4 +5,3 @@ pub mod steam;
 pub mod store;
 
 mod cache;
-mod parsing;

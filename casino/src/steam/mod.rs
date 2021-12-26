@@ -4,8 +4,11 @@ use std::sync::Arc;
 
 use crate::cache::Cache;
 pub use crate::csgofloat::ItemDescription;
-pub use crate::parsing::TrivialItem;
-use crate::parsing::{parse_raw_unlock, InventoryId, ParseResult, RawUnlock, TRADE_SELECTOR};
+use crate::steam::errors::{FetchItemsError, FetchNewUnpreparedItemsError, PrepareItemsError};
+pub use crate::steam::parsing::TrivialItem;
+use crate::steam::parsing::{
+    parse_raw_unlock, InventoryId, ParseSuccess, RawUnlock, TRADE_SELECTOR,
+};
 
 use bb8_redis::bb8::Pool;
 use bb8_redis::redis::{IntoConnectionInfo, RedisError};
@@ -16,7 +19,9 @@ use reqwest::{Client, Request, StatusCode, Url};
 use scraper::Html;
 use serde::{Deserialize, Serialize};
 use serde_aux::field_attributes::deserialize_number_from_string;
-use serde_aux::field_attributes;
+
+pub mod errors;
+mod parsing;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UnhydratedUnlock {
@@ -75,30 +80,6 @@ impl SteamCredentials {
     }
 }
 
-pub enum FetchNewItemsError {
-    TransportError(reqwest::Error),
-    AuthenticationFailure,
-    UnhandledStatusCode(StatusCode),
-    NoHistoryFound,
-}
-
-impl std::fmt::Debug for FetchNewItemsError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::TransportError(e) => write!(f, "HTTP error: {}", e),
-            Self::AuthenticationFailure => write!(f, "Authentication failure"),
-            Self::UnhandledStatusCode(code) => write!(f, "unhandled status code: {}", code),
-            Self::NoHistoryFound => write!(f, "failed to parse any history from steam site"),
-        }
-    }
-}
-
-impl From<reqwest::Error> for FetchNewItemsError {
-    fn from(e: reqwest::Error) -> Self {
-        Self::TransportError(e)
-    }
-}
-
 #[derive(Debug, Deserialize)]
 pub struct Inventory {
     assets: Vec<Asset>,
@@ -108,9 +89,10 @@ pub struct Inventory {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct InventoryDescription {
     #[serde(rename(deserialize = "classid"))]
-    pub class_id: String,
+    pub class_id: u64,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
     #[serde(rename(deserialize = "instanceid"))]
-    pub instance_id: String,
+    pub instance_id: u64,
     #[serde(rename(deserialize = "icon_url_large"))]
     pub icon_url: String,
     #[serde(rename(deserialize = "market_hash_name"))]
@@ -208,27 +190,28 @@ impl SteamClient {
         &self,
         since: Option<&DateTime<Utc>>,
         last_id: Option<&str>,
-    ) -> Result<Vec<UnhydratedUnlock>, FetchNewItemsError> {
+    ) -> Result<Vec<UnhydratedUnlock>, FetchItemsError> {
         let unhydrated = self.fetch_new_unprepared_items(since, last_id).await?;
-        Ok(self
+        let prepared = self
             .prepare_unlocks(unhydrated, self.username.clone())
-            .await
-            .unwrap())
+            .await?;
+
+        Ok(prepared)
     }
 
     async fn fetch_new_unprepared_items(
         &self,
         since: Option<&DateTime<Utc>>,
         last_id: Option<&str>,
-    ) -> Result<Vec<RawUnlock>, FetchNewItemsError> {
+    ) -> Result<Vec<RawUnlock>, FetchNewUnpreparedItemsError> {
         let resp = self.http_client.execute(self.inv_history_req()).await?;
 
         match resp.status() {
             StatusCode::OK => (),
             StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
-                return Err(FetchNewItemsError::AuthenticationFailure)
+                return Err(FetchNewUnpreparedItemsError::AuthenticationFailure)
             }
-            status => return Err(FetchNewItemsError::UnhandledStatusCode(status)),
+            status => return Err(FetchNewUnpreparedItemsError::UnhandledStatusCode(status)),
         }
 
         let data = resp.text().await?;
@@ -240,11 +223,10 @@ impl SteamClient {
         let mut unlocks: Vec<RawUnlock> = Vec::new();
 
         for trade in trades {
-            match parse_raw_unlock(trade, since, last_id) {
-                ParseResult::Success(v) => unlocks.push(v),
-                ParseResult::TooOld => return Ok(unlocks),
-                ParseResult::Unparseable => panic!("failed to parse html??"),
-                ParseResult::WrongTransactionType => {
+            match parse_raw_unlock(trade, since, last_id)? {
+                ParseSuccess::ValidItem(v) => unlocks.push(v),
+                ParseSuccess::TooOld => return Ok(unlocks),
+                ParseSuccess::WrongTransactionType => {
                     seen_any = true;
                     continue;
                 }
@@ -252,7 +234,7 @@ impl SteamClient {
         }
 
         if !seen_any {
-            return Err(FetchNewItemsError::NoHistoryFound);
+            return Err(FetchNewUnpreparedItemsError::NoHistoryFound);
         }
 
         Ok(unlocks)
@@ -262,24 +244,25 @@ impl SteamClient {
         &self,
         items: Vec<RawUnlock>,
         name: String,
-    ) -> Result<Vec<UnhydratedUnlock>, Infallible> {
+    ) -> Result<Vec<UnhydratedUnlock>, PrepareItemsError> {
         let resp = self
             .http_client
             .get(self.inventory_url.clone())
             .send()
-            .await
-            .unwrap()
-            .error_for_status()
-            .unwrap();
+            .await?
+            .error_for_status()?;
 
-        let inv: Inventory = resp.json().await.unwrap();
+        let inv: Inventory = resp
+            .json()
+            .await
+            .map_err(PrepareItemsError::ParsingPageResponse)?;
         let data_map: HashMap<InventoryId, InventoryDescription> = inv
             .descriptions
             .into_iter()
             .fold(HashMap::new(), |mut acc, item| {
                 let id = InventoryId {
-                    class_id: item.class_id.parse().unwrap(),
-                    instance_id: item.instance_id.parse().unwrap(),
+                    class_id: item.class_id,
+                    instance_id: item.instance_id,
                 };
 
                 acc.insert(id, item);

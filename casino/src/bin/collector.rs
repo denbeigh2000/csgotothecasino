@@ -1,5 +1,7 @@
 use std::env;
 
+use chrono::{Utc, NaiveDate, TimeZone};
+
 use casino::collector::Collector;
 use casino::steam::SteamCredentials;
 
@@ -18,7 +20,10 @@ async fn main() {
 
     let creds = SteamCredentials::new(session_id, login_token);
 
-    Collector::new(username, steam_id, creds, None)
+    let naive_start_time = NaiveDate::from_ymd(2021, 11, 21).and_hms(0, 0, 0);
+    let start_time = Utc.from_local_datetime(&naive_start_time).unwrap();
+
+    Collector::new(username, steam_id, creds, Some(start_time))
         .unwrap()
         .run()
         .await

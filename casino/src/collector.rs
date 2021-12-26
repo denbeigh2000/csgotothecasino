@@ -13,6 +13,7 @@ lazy_static::lazy_static! {
 }
 
 pub struct Collector {
+    http_client: Client,
     steam_client: SteamClient,
 
     last_unboxing: Option<DateTime<Utc>>,
@@ -26,8 +27,10 @@ impl Collector {
         creds: SteamCredentials,
         start_time: Option<DateTime<Utc>>,
     ) -> Result<Self, Infallible> {
+        let http_client = Client::new();
         let steam_client = SteamClient::new(steam_username, steam_id, creds).unwrap();
         Ok(Self {
+            http_client,
             steam_client,
 
             last_unboxing: start_time,
