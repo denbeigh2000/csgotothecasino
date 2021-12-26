@@ -1,10 +1,15 @@
 use core::fmt;
-use std::{collections::HashMap, convert::Infallible, fmt::Display, sync::Arc};
+use std::collections::HashMap;
+use std::convert::Infallible;
+use std::fmt::Display;
+use std::sync::Arc;
 
-use bb8_redis::{bb8::Pool, RedisConnectionManager, redis::{IntoConnectionInfo, RedisError}};
-use hyper::Body;
-use reqwest::{Client, StatusCode};
+use bb8_redis::bb8::Pool;
+use bb8_redis::redis::{IntoConnectionInfo, RedisError};
+use bb8_redis::RedisConnectionManager;
+use hyper_tungstenite::hyper::Body;
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
+use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_repr::Deserialize_repr;
 
@@ -184,13 +189,7 @@ pub async fn get_bulk_by_market_url(
         .header(AUTHORIZATION, key)
         .body(Body::from(req_data));
 
-    let resp: HashMap<String, ItemDescription> = req
-        .send()
-        .await
-        .unwrap()
-        .json()
-        .await
-        .unwrap();
+    let resp: HashMap<String, ItemDescription> = req.send().await.unwrap().json().await.unwrap();
 
     let items_by_url = url_map
         .into_iter()
@@ -211,11 +210,13 @@ pub struct CsgoFloatClient {
 }
 
 impl CsgoFloatClient {
-    pub async fn new<S: Into<String>, T: IntoConnectionInfo>(key: S, i: T) -> Result<Self, RedisError> {
-
+    pub async fn new<S: Into<String>, T: IntoConnectionInfo>(
+        key: S,
+        i: T,
+    ) -> Result<Self, RedisError> {
         let conn_info = i.into_connection_info()?;
         let mgr = RedisConnectionManager::new(conn_info.clone())?;
-        let pool = Arc::new(bb8_redis::bb8::Pool::builder().build(mgr).await?);
+        let pool = Arc::new(Pool::builder().build(mgr).await?);
 
         let cache = Cache::new(pool, "floatcache".to_string());
         let client = Client::new();
@@ -230,7 +231,9 @@ impl CsgoFloatClient {
             return Ok(entry);
         }
 
-        let res = get_by_market_url(&self.client, &self.key, url).await.unwrap();
+        let res = get_by_market_url(&self.client, &self.key, url)
+            .await
+            .unwrap();
         self.cache.set(url, &res).await?;
 
         Ok(res)
@@ -253,7 +256,9 @@ impl CsgoFloatClient {
 
         let mut fresh = HashMap::with_capacity(missing.len());
         for item in missing {
-            let desc = get_by_market_url(&self.client, &self.key, item).await.unwrap();
+            let desc = get_by_market_url(&self.client, &self.key, item)
+                .await
+                .unwrap();
             fresh.insert(item.to_string(), desc);
         }
 

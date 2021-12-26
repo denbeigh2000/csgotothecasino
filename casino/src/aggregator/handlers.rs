@@ -1,10 +1,9 @@
 use std::convert::Infallible;
-use std::sync::Arc;
 
-use futures_util::{Stream, SinkExt, StreamExt};
-use hyper::{Body, Method, Request, Response, StatusCode};
+use futures_util::{SinkExt, Stream, StreamExt};
+use hyper_tungstenite::hyper::{Body, Method, Request, Response, StatusCode};
 use hyper_tungstenite::tungstenite::Message;
-use hyper_tungstenite::{is_upgrade_request, HyperWebsocket, WebSocketStream};
+use hyper_tungstenite::{is_upgrade_request, HyperWebsocket};
 
 use crate::csgofloat::CsgoFloatClient;
 use crate::steam::{MarketPriceClient, UnhydratedUnlock, Unlock};
@@ -38,10 +37,14 @@ impl Handler {
 
     pub async fn save(&self, items: &[UnhydratedUnlock]) -> Result<(), Infallible> {
         let urls: Vec<&str> = items.iter().map(|i| i.item_market_link.as_str()).collect();
-        let mut float_info = self.csgofloat_client.get_bulk(&urls).await.unwrap();
+        let float_info = self.csgofloat_client.get_bulk(&urls).await.unwrap();
 
         for item in items {
-            let pricing = self.market_price_client.get(&item.item_market_name).await.unwrap();
+            let pricing = self
+                .market_price_client
+                .get(&item.item_market_name)
+                .await
+                .unwrap();
             let hydrated = Unlock {
                 key: item.key.clone(),
                 case: item.case.clone(),
@@ -67,7 +70,7 @@ impl Handler {
 
         let urls: Vec<&str> = state.iter().map(|e| e.item_market_link.as_ref()).collect();
 
-        let mut csgofloat_info = self.csgofloat_client.get_bulk(&urls).await?;
+        let csgofloat_info = self.csgofloat_client.get_bulk(&urls).await?;
         let mut entries = Vec::with_capacity(state.len());
         for entry in state.into_iter() {
             let p = self
@@ -160,7 +163,10 @@ pub async fn handle_websocket(
     Ok(resp)
 }
 
-async fn handle_upgraded_websocket<S: Stream<Item = Unlock> + Unpin>(mut stream: S, ws: HyperWebsocket) {
+async fn handle_upgraded_websocket<S: Stream<Item = Unlock> + Unpin>(
+    mut stream: S,
+    ws: HyperWebsocket,
+) {
     let mut ws = ws.await.unwrap();
     loop {
         tokio::select! {

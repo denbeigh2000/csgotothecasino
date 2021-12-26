@@ -41,14 +41,6 @@ pub struct InventoryId {
     pub instance_id: u64,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Item {
-    pub name: String,
-    pub id: InventoryId,
-    pub variant: String,
-    pub icon_url: String,
-}
-
 pub struct RawUnlock {
     pub case: TrivialItem,
     pub key: Option<TrivialItem>,
@@ -115,15 +107,15 @@ pub fn parse_raw_unlock(trade: ElementRef<'_>, since: Option<&DateTime<Utc>>) ->
     let gained_item = gained_items.select(&TRADE_ITEM_SELECTOR).next().unwrap();
 
     ParseResult::Success(RawUnlock {
-        case: item_from_node(case_node, "Case".into()),
-        key: key_node.map(|n| item_from_node(n, "Key".into())),
+        case: item_from_node(case_node),
+        key: key_node.map(item_from_node),
         item: inv_id_from_node(gained_item),
 
         at: datetime,
     })
 }
 
-fn item_from_node(r: ElementRef<'_>, variant: String) -> TrivialItem {
+fn item_from_node(r: ElementRef<'_>) -> TrivialItem {
     let name = r
         .select(&TRADE_ITEM_NAME_SELECTOR)
         .next()

@@ -5,14 +5,14 @@ use std::sync::Arc;
 use crate::cache::Cache;
 pub use crate::csgofloat::ItemDescription;
 pub use crate::parsing::TrivialItem;
-use crate::parsing::{parse_raw_unlock, InventoryId, Item, ParseResult, RawUnlock, TRADE_SELECTOR};
+use crate::parsing::{parse_raw_unlock, InventoryId, ParseResult, RawUnlock, TRADE_SELECTOR};
 
 use bb8_redis::bb8::Pool;
-use bb8_redis::RedisConnectionManager;
 use bb8_redis::redis::{IntoConnectionInfo, RedisError};
+use bb8_redis::RedisConnectionManager;
 use chrono::{DateTime, Utc};
 use reqwest::cookie::Jar;
-use reqwest::{Client, StatusCode, Url};
+use reqwest::{Client, Request, StatusCode, Url};
 use scraper::Html;
 use serde::Deserialize;
 use serde::Serialize;
@@ -136,20 +136,6 @@ pub struct Action {
     name: String,
 }
 
-impl Into<Item> for &InventoryDescription {
-    fn into(self) -> Item {
-        Item {
-            name: self.name.clone(),
-            id: InventoryId {
-                class_id: self.class_id.parse().unwrap(),
-                instance_id: self.instance_id.parse().unwrap(),
-            },
-            variant: self.variant.clone(),
-            icon_url: self.icon_url.clone(),
-        }
-    }
-}
-
 pub struct SteamClient {
     username: String,
     user_id: u64,
@@ -194,6 +180,19 @@ impl SteamClient {
         })
     }
 
+    fn inv_history_req(&self) -> Request {
+        self.http_client
+            .get(self.inventory_history_url.clone())
+            .header("Cookie", &self.cookie_str)
+            .build()
+            .unwrap()
+    }
+
+    pub async fn check_authenticated(&self) -> Result<(), Infallible> {
+        let req = self.http_client.execute(self.inv_history_req()).await.unwrap();
+        todo!()
+    }
+
     pub async fn fetch_new_items(
         &self,
         since: Option<&DateTime<Utc>>,
@@ -209,21 +208,14 @@ impl SteamClient {
         &self,
         since: Option<&DateTime<Utc>>,
     ) -> Result<Vec<RawUnlock>, FetchNewItemsError> {
-        let resp = self
-            .http_client
-            .get(self.inventory_history_url.clone())
-            .header("Cookie", &self.cookie_str)
-            .send()
-            .await?;
+        let resp = self.http_client.execute(self.inv_history_req()).await?;
 
-        let status = resp.status();
-
-        match status {
+        match resp.status() {
             StatusCode::OK => (),
             StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
                 return Err(FetchNewItemsError::AuthenticationFailure)
             }
-            _ => return Err(FetchNewItemsError::UnhandledStatusCode(status)),
+            status => return Err(FetchNewItemsError::UnhandledStatusCode(status)),
         }
 
         let data = resp.text().await?;
@@ -383,7 +375,7 @@ impl MarketPriceClient {
     pub async fn new<T: IntoConnectionInfo>(i: T) -> Result<Self, RedisError> {
         let conn_info = i.into_connection_info()?;
         let mgr = RedisConnectionManager::new(conn_info.clone())?;
-        let pool = Arc::new(bb8_redis::bb8::Pool::builder().build(mgr).await?);
+        let pool = Arc::new(Pool::builder().build(mgr).await?);
         let client = Client::new();
 
         let cache = Cache::new(pool, "market".to_string());

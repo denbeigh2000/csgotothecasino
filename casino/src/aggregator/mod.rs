@@ -2,12 +2,10 @@ use std::convert::Infallible;
 use std::future::Future;
 use std::sync::Arc;
 
-use bb8_redis::redis::RedisError;
-use hyper::server::conn::AddrStream;
-use hyper::service::{make_service_fn, service_fn};
-use hyper::{Body, Request, Response};
+use hyper_tungstenite::hyper::server::conn::AddrStream;
+use hyper_tungstenite::hyper::service::{make_service_fn, service_fn};
+use hyper_tungstenite::hyper::{Body, Request, Response};
 use route_recognizer::Router;
-
 
 mod http;
 mod websocket;
@@ -15,16 +13,16 @@ mod websocket;
 #[cfg(feature = "not-stub")]
 mod handlers;
 #[cfg(feature = "not-stub")]
-use crate::aggregator::handlers::{handle_state, handle_websocket, handle_upload};
+use crate::aggregator::handlers::{handle_state, handle_upload, handle_websocket};
 #[cfg(feature = "not-stub")]
-pub use crate::aggregator::handlers::{Handler, new_handler_unimplemented};
+pub use crate::aggregator::handlers::{new_handler_unimplemented, Handler};
 
 #[cfg(not(feature = "not-stub"))]
 mod stub_handlers;
 #[cfg(not(feature = "not-stub"))]
-use crate::aggregator::stub_handlers::{handle_state, handle_websocket, handle_upload};
-#[cfg(not(feature = "not-stub"))]
 pub use crate::aggregator::stub_handlers::Handler;
+#[cfg(not(feature = "not-stub"))]
+use crate::aggregator::stub_handlers::{handle_state, handle_upload, handle_websocket};
 
 use crate::aggregator::http::{resp_404, router, Route};
 

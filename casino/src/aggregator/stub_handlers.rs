@@ -3,9 +3,10 @@ use std::time::Duration;
 
 use chrono::Utc;
 use futures_util::StreamExt;
-use hyper::service::{make_service_fn, service_fn};
-use hyper::upgrade::Upgraded;
-use hyper::{Body, Method, Request, Response, StatusCode};
+use hyper_tungstenite::hyper::header::CONTENT_TYPE;
+use hyper_tungstenite::hyper::service::{make_service_fn, service_fn};
+use hyper_tungstenite::hyper::upgrade::Upgraded;
+use hyper_tungstenite::hyper::{Body, Method, Request, Response, StatusCode};
 use hyper_tungstenite::tungstenite::Message;
 use hyper_tungstenite::{is_upgrade_request, HyperWebsocket, WebSocketStream};
 use route_recognizer::Router;
@@ -87,7 +88,10 @@ static CLUTCH_CASE_KEY_IMG: &str = "https://community.cloudflare.steamstatic.com
 #[derive(Default)]
 pub struct Handler {}
 
-pub async fn handle_websocket(_h: &Handler, req: Request<Body>) -> Result<Response<Body>, Infallible> {
+pub async fn handle_websocket(
+    _h: &Handler,
+    req: Request<Body>,
+) -> Result<Response<Body>, Infallible> {
     if !is_upgrade_request(&req) {
         return Ok(resp_400());
     }
@@ -121,7 +125,11 @@ pub async fn handle_websocket(_h: &Handler, req: Request<Body>) -> Result<Respon
 async fn send_unlock(socket: &mut WebSocketStream<Upgraded>) {
     let item_value: MarketPrices = (*STUB_ITEM_VALUE).clone().try_into().unwrap();
     let unlock = Unlock {
-        key: Some(TrivialItem::new("Clutch Case Key", CLUTCH_CASE_KEY_IMG, None)),
+        key: Some(TrivialItem::new(
+            "Clutch Case Key",
+            CLUTCH_CASE_KEY_IMG,
+            None,
+        )),
         case: TrivialItem::new("Clutch Case", CLUTCH_CASE_IMG, None),
         item: STUB_ITEM.clone(),
         item_value,
@@ -156,7 +164,7 @@ pub async fn handle_state(_h: &Handler, req: Request<Body>) -> Result<Response<B
     let encoded_data = serde_json::to_vec(&data).unwrap();
 
     let resp = Response::builder()
-        .header(hyper::header::CONTENT_TYPE, "application/json")
+        .header(CONTENT_TYPE, "application/json")
         .body(Body::from(encoded_data))
         .unwrap();
 

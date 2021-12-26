@@ -1,7 +1,7 @@
 use std::convert::Infallible;
 
 use futures_util::SinkExt;
-use hyper::upgrade::Upgraded;
+use hyper_tungstenite::hyper::upgrade::Upgraded;
 use hyper_tungstenite::tungstenite::Message;
 use hyper_tungstenite::WebSocketStream;
 

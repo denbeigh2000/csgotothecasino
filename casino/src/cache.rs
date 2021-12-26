@@ -63,7 +63,7 @@ impl<T: DeserializeOwned + Serialize> Cache<T> {
                     m.insert(i.to_string(), r);
                     Ok(m)
                 }
-            }
+            };
         }
 
         let mut conn = self.get_conn().await?;

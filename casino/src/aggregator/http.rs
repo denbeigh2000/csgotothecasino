@@ -1,4 +1,4 @@
-use hyper::{Body, Response};
+use hyper_tungstenite::hyper::{Body, Response};
 use route_recognizer::Router;
 
 pub fn resp_404() -> Response<Body> {

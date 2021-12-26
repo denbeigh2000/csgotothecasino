@@ -21,7 +21,9 @@ async fn main() {
             .unwrap_or_else(|_| panic!("not a valid redis url: {}", redis_url));
 
         let store = Store::new(info.clone()).await.unwrap();
-        let csgo_float = CsgoFloatClient::new(csgofloat_key, info.clone()).await.unwrap();
+        let csgo_float = CsgoFloatClient::new(csgofloat_key, info.clone())
+            .await
+            .unwrap();
         let market_price_client = MarketPriceClient::new(info).await.unwrap();
 
         Handler::new(store, csgo_float, market_price_client)
