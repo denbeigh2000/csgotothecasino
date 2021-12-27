@@ -7,7 +7,8 @@ pub use crate::csgofloat::ItemDescription;
 use crate::steam::errors::{FetchItemsError, FetchNewUnpreparedItemsError, PrepareItemsError};
 pub use crate::steam::parsing::TrivialItem;
 use crate::steam::parsing::{
-    is_authenticated, parse_raw_unlock, InventoryId, ParseSuccess, RawUnlock, TRADE_SELECTOR,
+    get_userid, is_authenticated, parse_raw_unlock, InventoryId, ParseSuccess, RawUnlock,
+    TRADE_SELECTOR,
 };
 
 use bb8_redis::bb8::Pool;
@@ -126,14 +127,24 @@ pub struct SteamClient {
 }
 
 impl SteamClient {
-    pub fn new(
-        username: String,
-        user_id: u64,
-        creds: SteamCredentials,
-    ) -> Result<Self, Infallible> {
+    pub async fn new(username: String, creds: SteamCredentials) -> Result<Self, Infallible> {
         let http_client = Client::builder().build().unwrap();
 
         let cookie_str = creds.into_string();
+
+        let profile_url = format!("https://steamcommunity.com/id/{}", username);
+        let profile_resp = http_client
+            .get(&profile_url)
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        let parsed_profile_resp = Html::parse_document(&profile_resp);
+        let user_id = get_userid(&parsed_profile_resp).unwrap();
+
+        eprintln!("parsed user id: {}", &user_id);
 
         let inventory_url = format!(
             "https://steamcommunity.com/inventory/{}/730/2?l=english&count=25",
@@ -141,12 +152,9 @@ impl SteamClient {
         )
         .parse()
         .unwrap();
-        let inventory_history_url = format!(
-            "https://steamcommunity.com/id/{}/inventoryhistory/?app[]=730",
-            username
-        )
-        .parse()
-        .unwrap();
+        let inventory_history_url = format!("{}/inventoryhistory/?app[]=730", profile_url)
+            .parse()
+            .unwrap();
 
         Ok(Self {
             username,

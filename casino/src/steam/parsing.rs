@@ -1,4 +1,5 @@
 use std::fmt::{self, Display};
+use std::num::ParseIntError;
 
 use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use regex::Regex;
@@ -11,6 +12,8 @@ lazy_static::lazy_static! {
     pub static ref LOGGED_IN_ACTION_SELECTOR: Selector = Selector::parse("#account_pulldown").unwrap();
     pub static ref LOGGED_OUT_ACTION_SELECTOR: Selector = Selector::parse("#language_pulldown").unwrap();
 
+    pub static ref USER_ID_SELECTOR: Selector = Selector::parse("div.commentthread_area").unwrap();
+
     pub static ref TRADE_SELECTOR: Selector = Selector::parse("div.tradehistoryrow").unwrap();
     pub static ref TRADE_DATE_SELECTOR: Selector = Selector::parse("div.tradehistory_date").unwrap();
     pub static ref DESCRIPTION_SELECTOR: Selector = Selector::parse("div.tradehistory_event_description").unwrap();
@@ -20,6 +23,7 @@ lazy_static::lazy_static! {
     pub static ref TRADE_ITEM_NAME_SELECTOR: Selector = Selector::parse("span.history_item_name").unwrap();
 
     pub static ref HISTORY_ID_REGEX: Regex = Regex::new(r"^history([0-9a-f]{40})_.+").unwrap();
+    pub static ref USER_ID_REGEX: Regex = Regex::new("commentthread_Profile_([0-9]+)_.*").unwrap();
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -143,6 +147,36 @@ impl Display for TrivialItemParseError {
 }
 
 #[derive(Debug)]
+pub enum UserIdParseError {
+    MissingUserIdElement,
+    BadUserId(ParseIntError),
+    UserIdElementParseError,
+}
+
+impl From<ParseIntError> for UserIdParseError {
+    fn from(e: ParseIntError) -> Self {
+        Self::BadUserId(e)
+    }
+}
+
+pub fn get_userid(page: &Html) -> Result<u64, UserIdParseError> {
+    let user_id_element = page
+        .select(&USER_ID_SELECTOR)
+        .next()
+        .ok_or(UserIdParseError::MissingUserIdElement)?;
+
+    let element_id = user_id_element
+        .value()
+        .id()
+        .ok_or(UserIdParseError::MissingUserIdElement)?;
+
+    match USER_ID_REGEX.captures(element_id) {
+        Some(g) => Ok(g.get(1).unwrap().as_str().parse()?),
+        None => Err(UserIdParseError::UserIdElementParseError),
+    }
+}
+
+#[derive(Debug)]
 pub enum AuthenticationParseError {
     MissingSteamLoginArea,
     MissingLoginOrUserInfo,
@@ -163,14 +197,22 @@ pub fn is_authenticated(page: &Html) -> Result<bool, AuthenticationParseError> {
         .next()
         .ok_or(AuthenticationParseError::MissingSteamLoginArea)?;
 
-    if let Some(_) = login_area.select(&LOGGED_IN_ACTION_SELECTOR).next() {
+    if login_area
+        .select(&LOGGED_IN_ACTION_SELECTOR)
+        .next()
+        .is_some()
+    {
         return Ok(true);
     }
-    if let Some(_) = login_area.select(&LOGGED_OUT_ACTION_SELECTOR).next() {
+    if login_area
+        .select(&LOGGED_OUT_ACTION_SELECTOR)
+        .next()
+        .is_some()
+    {
         return Ok(false);
     }
 
-    return Err(AuthenticationParseError::MissingLoginOrUserInfo);
+    Err(AuthenticationParseError::MissingLoginOrUserInfo)
 }
 
 pub fn parse_raw_unlock(

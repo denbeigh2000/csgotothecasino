@@ -8,10 +8,6 @@ use casino::steam::SteamCredentials;
 #[tokio::main]
 async fn main() {
     let username = env::var("STEAM_USERNAME").expect("STEAM_USERNAME unset");
-    let steam_id = env::var("STEAM_ID")
-        .expect("STEAM_ID unset")
-        .parse()
-        .unwrap();
     let session_id = env::var("STEAM_SESSION_ID")
         .expect("STEAM_SESSION_ID unset")
         .parse()
@@ -23,7 +19,8 @@ async fn main() {
     let naive_start_time = NaiveDate::from_ymd(2021, 11, 21).and_hms(0, 0, 0);
     let start_time = Utc.from_local_datetime(&naive_start_time).unwrap();
 
-    Collector::new(username, steam_id, creds, Some(start_time))
+    Collector::new(username, creds, Some(start_time))
+        .await
         .unwrap()
         .run()
         .await

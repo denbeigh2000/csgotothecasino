@@ -8,7 +8,7 @@ use tokio::time::interval;
 use crate::steam::{SteamClient, SteamCredentials, UnhydratedUnlock};
 
 lazy_static::lazy_static! {
-    static ref COLLECTION_URL: Url = "https://127.0.0.1:7000/upload".parse().unwrap();
+    static ref COLLECTION_URL: Url = "http://127.0.0.1:7000/upload".parse().unwrap();
     static ref POLL_INTERVAL: Duration = Duration::from_secs(30);
 }
 
@@ -21,14 +21,16 @@ pub struct Collector {
 }
 
 impl Collector {
-    pub fn new(
+    pub async fn new(
         steam_username: String,
         steam_id: u64,
         creds: SteamCredentials,
         start_time: Option<DateTime<Utc>>,
     ) -> Result<Self, Infallible> {
         let http_client = Client::new();
-        let steam_client = SteamClient::new(steam_username, steam_id, creds).unwrap();
+        let steam_client = SteamClient::new(steam_username, steam_id, creds)
+            .await
+            .unwrap();
         Ok(Self {
             http_client,
             steam_client,
