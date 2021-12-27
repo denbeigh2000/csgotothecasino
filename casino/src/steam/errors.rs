@@ -65,13 +65,19 @@ impl From<PrepareItemsError> for FetchItemsError {
 
 #[derive(Debug)]
 pub enum PrepareItemsError {
-    FetchingInventoryError(reqwest::Error),
-    ParsingPageResponse(reqwest::Error),
+    Transport(reqwest::Error),
+    Deserializing(serde_json::Error),
 }
 
 impl From<reqwest::Error> for PrepareItemsError {
     fn from(e: reqwest::Error) -> Self {
-        Self::FetchingInventoryError(e)
+        Self::Transport(e)
+    }
+}
+
+impl From<serde_json::Error> for PrepareItemsError {
+    fn from(e: serde_json::Error) -> Self {
+        Self::Deserializing(e)
     }
 }
 

@@ -235,21 +235,16 @@ impl SteamClient {
             .get(self.inventory_url.clone())
             .send()
             .await?
-            .error_for_status()?;
+            .error_for_status()?
+            .bytes()
+            .await?;
 
-        let inv: Inventory = resp
-            .json()
-            .await
-            .map_err(PrepareItemsError::ParsingPageResponse)?;
+        let inv: Inventory = serde_json::from_slice(&resp)?;
         let data_map: HashMap<InventoryId, InventoryDescription> = inv
             .descriptions
             .into_iter()
             .fold(HashMap::new(), |mut acc, item| {
-                let id = InventoryId {
-                    class_id: item.class_id,
-                    instance_id: item.instance_id,
-                };
-
+                let id = InventoryId::new(item.class_id, item.instance_id);
                 acc.insert(id, item);
                 acc
             });
@@ -258,11 +253,7 @@ impl SteamClient {
             inv.assets
                 .into_iter()
                 .fold(HashMap::new(), |mut acc, item| {
-                    let id = InventoryId {
-                        class_id: item.class_id,
-                        instance_id: item.instance_id,
-                    };
-
+                    let id = InventoryId::new(item.class_id, item.instance_id);
                     acc.insert(id, item);
                     acc
                 });

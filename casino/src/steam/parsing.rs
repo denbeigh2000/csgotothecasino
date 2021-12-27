@@ -51,6 +51,15 @@ pub struct InventoryId {
     pub instance_id: u64,
 }
 
+impl InventoryId {
+    pub fn new(class_id: u64, instance_id: u64) -> Self {
+        Self {
+            class_id,
+            instance_id,
+        }
+    }
+}
+
 pub struct RawUnlock {
     pub history_id: String,
 
