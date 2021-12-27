@@ -5,6 +5,10 @@ pub fn resp_404() -> Response<Body> {
     Response::builder().status(404).body(Body::empty()).unwrap()
 }
 
+pub fn resp_403() -> Response<Body> {
+    Response::builder().status(403).body(Body::empty()).unwrap()
+}
+
 pub fn resp_400() -> Response<Body> {
     Response::builder().status(400).body(Body::empty()).unwrap()
 }

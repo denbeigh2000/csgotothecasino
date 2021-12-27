@@ -15,7 +15,7 @@ lazy_static::lazy_static! {
 #[tokio::main]
 async fn main() {
     let username = env::var("STEAM_USERNAME").expect("STEAM_USERNAME unset");
-    let creds = if CREDS_PATH.exists() {
+    let steam_creds = if CREDS_PATH.exists() {
         load_credentials_from_file(CREDS_PATH.as_path())
             .await
             .unwrap()
@@ -25,10 +25,11 @@ async fn main() {
         creds
     };
 
+    let pre_shared_key = "denbeigh".to_string();
     let naive_start_time = NaiveDate::from_ymd(2021, 11, 21).and_hms(0, 0, 0);
     let start_time = Utc.from_local_datetime(&naive_start_time).unwrap();
 
-    Collector::new(username, creds, Some(start_time))
+    Collector::new(username, pre_shared_key, steam_creds, Some(start_time))
         .await
         .unwrap()
         .run()

@@ -1,6 +1,7 @@
 use std::convert::Infallible;
 
 use futures_util::{SinkExt, Stream, StreamExt};
+use hyper::header::AUTHORIZATION;
 use hyper_tungstenite::hyper::{Body, Method, Request, Response, StatusCode};
 use hyper_tungstenite::tungstenite::Message;
 use hyper_tungstenite::{is_upgrade_request, HyperWebsocket};
@@ -10,11 +11,13 @@ use crate::steam::errors::MarketPriceFetchError;
 use crate::steam::{MarketPriceClient, UnhydratedUnlock, Unlock};
 use crate::store::{Store, StoreError};
 
-use super::http::resp_400;
+use super::http::{resp_400, resp_403};
+use super::keystore::KeyStore;
 use super::websocket::{handle_emit, handle_recv};
 
 #[derive(Debug)]
 pub enum HandlerError {
+    BadKey,
     Transport(hyper::Error),
     Store(StoreError),
     MarketPrice(MarketPriceFetchError),
@@ -54,6 +57,7 @@ impl From<hyper::Error> for HandlerError {
 
 pub struct Handler {
     store: Store,
+    key_store: KeyStore,
     csgofloat_client: CsgoFloatClient,
     market_price_client: MarketPriceClient,
 }
@@ -61,17 +65,32 @@ pub struct Handler {
 impl Handler {
     pub fn new(
         store: Store,
+        key_store: KeyStore,
         csgofloat_client: CsgoFloatClient,
         market_price_client: MarketPriceClient,
     ) -> Self {
         Self {
             store,
+            key_store,
             csgofloat_client,
             market_price_client,
         }
     }
 
-    pub async fn save(&self, items: &[UnhydratedUnlock]) -> Result<(), HandlerError> {
+    pub async fn save(&self, key: &str, items: &[UnhydratedUnlock]) -> Result<(), HandlerError> {
+        if items.is_empty() {
+            return Ok(());
+        }
+
+        let item = items.get(0).unwrap();
+        if !self.key_store.verify(&item.name, key).unwrap_or(false) {
+            return Err(HandlerError::BadKey);
+        }
+        // ensure all entries are for the same person
+        if !items.iter().all(|i| i.name == item.name) {
+            return Err(HandlerError::BadKey);
+        }
+
         let urls: Vec<&str> = items.iter().map(|i| i.item_market_link.as_str()).collect();
         let float_info = self.csgofloat_client.get_bulk(&urls).await?;
 
@@ -167,11 +186,19 @@ pub async fn handle_upload(
         }
     };
 
-    let status = match h.save(&unlock).await {
+    let key = match req.headers().get(AUTHORIZATION) {
+        Some(k) => k.to_str().unwrap(),
+        None => return Ok(resp_403()),
+    };
+
+    let status = match h.save(key, &unlock).await {
         Ok(_) => StatusCode::OK,
         Err(e) => {
             eprintln!("saving failed: {:?}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
+            match e {
+                HandlerError::BadKey => StatusCode::UNAUTHORIZED,
+                _ => StatusCode::INTERNAL_SERVER_ERROR,
+            }
         }
     };
 

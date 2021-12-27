@@ -8,6 +8,7 @@ use hyper_tungstenite::hyper::{Body, Request, Response};
 use route_recognizer::Router;
 
 mod http;
+pub mod keystore;
 mod websocket;
 
 #[cfg(feature = "not-stub")]

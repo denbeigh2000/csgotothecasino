@@ -1,7 +1,9 @@
+use std::collections::HashMap;
 use std::env;
 
 use bb8_redis::redis::ConnectionInfo;
 
+use casino::aggregator::keystore::KeyStore;
 use casino::aggregator::{serve, Handler};
 use casino::csgofloat::CsgoFloatClient;
 use casino::steam::MarketPriceClient;
@@ -21,12 +23,16 @@ async fn main() {
             .unwrap_or_else(|_| panic!("not a valid redis url: {}", redis_url));
 
         let store = Store::new(info.clone()).await.unwrap();
+        let mut dev_keys: HashMap<String, String> = HashMap::new();
+        dev_keys.insert("denbeigh2000".to_string(), "denbeigh".to_string());
+        dev_keys.insert("badcop_".to_string(), "denbeigh".to_string());
+        let keystore = KeyStore::new(dev_keys);
         let csgo_float = CsgoFloatClient::new(csgofloat_key, info.clone())
             .await
             .unwrap();
         let market_price_client = MarketPriceClient::new(info).await.unwrap();
 
-        Handler::new(store, csgo_float, market_price_client)
+        Handler::new(store, keystore, csgo_float, market_price_client)
     };
 
     serve(make_handler).await.unwrap();

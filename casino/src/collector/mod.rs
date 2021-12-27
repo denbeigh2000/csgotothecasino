@@ -2,6 +2,7 @@ use std::convert::Infallible;
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
+use hyper::header::AUTHORIZATION;
 use reqwest::{Client, Url};
 use tokio::time::interval;
 
@@ -12,9 +13,12 @@ lazy_static::lazy_static! {
     static ref POLL_INTERVAL: Duration = Duration::from_secs(30);
 }
 
+mod config;
+
 pub struct Collector {
     http_client: Client,
     steam_client: SteamClient,
+    pre_shared_key: String,
 
     last_unboxing: Option<DateTime<Utc>>,
     last_parsed_history_id: Option<String>,
@@ -23,6 +27,7 @@ pub struct Collector {
 impl Collector {
     pub async fn new(
         steam_username: String,
+        pre_shared_key: String,
         creds: SteamCredentials,
         start_time: Option<DateTime<Utc>>,
     ) -> Result<Self, Infallible> {
@@ -31,6 +36,7 @@ impl Collector {
         Ok(Self {
             http_client,
             steam_client,
+            pre_shared_key,
 
             last_unboxing: start_time,
             last_parsed_history_id: None,
@@ -72,7 +78,15 @@ impl Collector {
     async fn send_results(&self, items: &[UnhydratedUnlock]) -> Result<(), Infallible> {
         let data = serde_json::to_vec(items).unwrap();
         let url = COLLECTION_URL.clone();
-        self.http_client.post(url).body(data).send().await.unwrap();
+        self.http_client
+            .post(url)
+            .body(data)
+            .header(AUTHORIZATION, &self.pre_shared_key)
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap();
 
         Ok(())
     }
