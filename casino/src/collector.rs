@@ -23,14 +23,11 @@ pub struct Collector {
 impl Collector {
     pub async fn new(
         steam_username: String,
-        steam_id: u64,
         creds: SteamCredentials,
         start_time: Option<DateTime<Utc>>,
     ) -> Result<Self, Infallible> {
         let http_client = Client::new();
-        let steam_client = SteamClient::new(steam_username, steam_id, creds)
-            .await
-            .unwrap();
+        let steam_client = SteamClient::new(steam_username, creds).await.unwrap();
         Ok(Self {
             http_client,
             steam_client,

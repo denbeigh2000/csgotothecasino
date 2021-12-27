@@ -64,6 +64,7 @@ impl InventoryId {
     }
 }
 
+#[derive(Debug)]
 pub struct RawUnlock {
     pub history_id: String,
 

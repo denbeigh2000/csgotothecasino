@@ -84,14 +84,13 @@ pub struct InventoryDescription {
     #[serde(deserialize_with = "deserialize_number_from_string")]
     #[serde(rename(deserialize = "instanceid"))]
     pub instance_id: u64,
-    #[serde(rename(deserialize = "icon_url_large"))]
     pub icon_url: String,
     #[serde(rename(deserialize = "market_hash_name"))]
     pub name: String,
     #[serde(rename = "type")]
     pub variant: String,
 
-    pub actions: Vec<Action>,
+    pub actions: Option<Vec<Action>>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -143,8 +142,6 @@ impl SteamClient {
             .unwrap();
         let parsed_profile_resp = Html::parse_document(&profile_resp);
         let user_id = get_userid(&parsed_profile_resp).unwrap();
-
-        eprintln!("parsed user id: {}", &user_id);
 
         let inventory_url = format!(
             "https://steamcommunity.com/inventory/{}/730/2?l=english&count=25",
@@ -244,10 +241,10 @@ impl SteamClient {
             .send()
             .await?
             .error_for_status()?
-            .bytes()
+            .text()
             .await?;
 
-        let inv: Inventory = serde_json::from_slice(&resp)?;
+        let inv: Inventory = serde_json::from_str(&resp)?;
         let data_map: HashMap<InventoryId, InventoryDescription> = inv
             .descriptions
             .into_iter()
@@ -275,8 +272,8 @@ impl SteamClient {
                 let item_asset = asset_map.get(&i.item).unwrap();
 
                 let item_market_name = item_data.name.clone();
-                let link_tpl = item_data
-                    .actions
+                let actions = item_data.actions.as_ref().unwrap();
+                let link_tpl = actions
                     .iter()
                     .find(|a| {
                         a.name.starts_with("Inspect") && a.link.starts_with("steam://rungame/730/")

@@ -42,8 +42,6 @@ pub struct ItemDescription {
     #[serde(alias = "defindex")]
     def_index: u32,
     stickers: Vec<Sticker>,
-    #[serde(alias = "floatid")]
-    float_id: String,
     #[serde(alias = "floatvalue")]
     float_value: f32,
     s: String,
@@ -149,7 +147,8 @@ pub async fn get_by_market_url(
 
     match resp.status() {
         StatusCode::OK => {
-            let data: FloatItemResponse = resp.json().await?;
+            let data = resp.text().await?;
+            let data: FloatItemResponse = serde_json::from_str(&data)?;
             Ok(data.iteminfo)
         }
         status => {
@@ -204,8 +203,9 @@ pub async fn get_bulk_by_market_url(
         .header(AUTHORIZATION, key)
         .body(Body::from(req_data));
 
-    let body = req.send().await?.bytes().await?;
-    let resp: HashMap<String, ItemDescription> = serde_json::from_slice(&body)?;
+    let body = req.send().await?.text().await?;
+    eprintln!("received from csgofloat: {}", body);
+    let resp: HashMap<String, ItemDescription> = serde_json::from_str(&body)?;
 
     let items_by_url = url_map
         .into_iter()
