@@ -1,7 +1,7 @@
 use std::fmt::{self, Display};
 use std::num::ParseIntError;
 
-use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
+use chrono::{DateTime, Local, NaiveDateTime, TimeZone, Utc};
 use regex::Regex;
 use scraper::element_ref::Text;
 use scraper::{ElementRef, Html, Selector};
@@ -259,7 +259,10 @@ pub fn parse_raw_unlock(
         "%b %e, %Y %l:%M%P",
     )
     .map_err(|_| ParseFailure::DateFormattingChanged)?;
-    let datetime = Utc.from_local_datetime(&datetime).unwrap();
+    let datetime = Local
+        .from_local_datetime(&datetime)
+        .unwrap()
+        .with_timezone(&Utc);
 
     if since.map(|s| &datetime < s).unwrap_or(false) {
         // We have successfully started parsing a trade that is older than our threshold, return
