@@ -112,14 +112,32 @@ impl Store {
 
     pub async fn get_entries(&self) -> Result<Vec<UnhydratedUnlock>, StoreError> {
         let mut conn = self.get_conn().await?;
-        let res: Option<Vec<UnhydratedUnlock>> = conn.lrange("unlocks", 0, -1).await?;
+        let keys: Vec<String> = match conn.zrevrange("entries", 0, -1).await? {
+            Some(keys) => keys,
+            None => return Ok(Vec::new()),
+        };
+        let redis_keys: Vec<String> = keys.iter().map(|k| format!("unlock_{}", k)).collect();
+        let values: Vec<UnhydratedUnlock> = conn.get(&redis_keys).await?;
 
-        Ok(res.unwrap_or_else(Vec::new))
+        Ok(values)
     }
 
     pub async fn append_entry(&self, entry: &UnhydratedUnlock) -> Result<(), StoreError> {
         let mut conn = self.get_conn().await?;
-        let _res: () = conn.lpush("unlocks", entry).await?;
+        let ts = entry.at.timestamp_millis();
+        let id = &entry.history_id;
+        let data_key = format!("unlock_{}", id);
+        let data = serde_json::to_vec(&entry)?;
+        let _res: () = bb8_redis::redis::pipe()
+            .cmd("ZADD")
+            .arg("entries")
+            .arg(ts)
+            .arg(id)
+            .cmd("SET")
+            .arg(data_key)
+            .arg(data)
+            .query_async(&mut *conn)
+            .await?;
 
         Ok(())
     }
