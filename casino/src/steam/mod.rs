@@ -15,6 +15,7 @@ use bb8_redis::bb8::Pool;
 use bb8_redis::redis::{IntoConnectionInfo, RedisError};
 use bb8_redis::RedisConnectionManager;
 use chrono::{DateTime, Utc};
+use regex::Regex;
 use reqwest::{Client, Request, StatusCode, Url};
 use scraper::Html;
 use serde::{Deserialize, Serialize};
@@ -24,6 +25,10 @@ use self::errors::MarketPriceFetchError;
 
 pub mod errors;
 mod parsing;
+
+lazy_static::lazy_static! {
+    static ref COOKIE_REGEX: Regex = Regex::new(r"[^\s=;]+=[^\s=;]+").unwrap();
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UnhydratedUnlock {
@@ -50,24 +55,54 @@ pub struct Unlock {
     pub name: String,
 }
 
+#[derive(Debug)]
+pub enum CredentialParseError {
+    NoSessionId,
+    DoesNotResembleCookie,
+}
+
 pub struct SteamCredentials {
     session_id: String,
-    login_token: String,
+    // NOTE: Unsure if this is required on accounts without steam guard
+    login_token: Option<String>,
 }
 
 impl SteamCredentials {
     pub fn new(session_id: String, login_token: String) -> Self {
+        let login_token = Some(login_token);
         Self {
             session_id,
             login_token,
         }
     }
 
+    pub fn try_from_cookie_str<S: AsRef<str>>(cookie_str: S) -> Result<Self, CredentialParseError> {
+        let mut session_id: Option<String> = None;
+        let mut login_token: Option<String> = None;
+        let mut cookies = COOKIE_REGEX.find_iter(cookie_str.as_ref()).peekable();
+        if cookies.peek().is_none() {
+            return Err(CredentialParseError::DoesNotResembleCookie);
+        }
+
+        for cookie in cookies {
+            match cookie.as_str().split_once('=').unwrap() {
+                ("sessionid", v) => session_id = Some(v.to_string()),
+                ("steamLoginSecure", v) => login_token = Some(v.to_string()),
+                _ => (),
+            };
+        }
+
+        match session_id {
+            Some(session_id) => Ok(Self { session_id, login_token }),
+            None => Err(CredentialParseError::NoSessionId),
+        }
+    }
+
     pub fn into_string(self) -> String {
-        format!(
-            "sessionid={}; steamLoginSecure={}",
-            self.session_id, self.login_token
-        )
+        match self.login_token {
+            Some(t) => format!("sessionid={}; steamLoginSecure={}", self.session_id, t),
+            None => format!("sessionid={}", self.session_id),
+        }
     }
 }
 
