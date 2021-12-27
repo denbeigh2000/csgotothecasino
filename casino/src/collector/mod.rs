@@ -8,12 +8,14 @@ use tokio::time::interval;
 
 use crate::steam::{SteamClient, SteamCredentials, UnhydratedUnlock};
 
+use self::config::Config;
+
 lazy_static::lazy_static! {
     static ref COLLECTION_URL: Url = "http://127.0.0.1:7000/upload".parse().unwrap();
     static ref POLL_INTERVAL: Duration = Duration::from_secs(30);
 }
 
-mod config;
+pub mod config;
 
 pub struct Collector {
     http_client: Client,
@@ -41,6 +43,14 @@ impl Collector {
             last_unboxing: start_time,
             last_parsed_history_id: None,
         })
+    }
+
+    pub async fn from_config(
+        cfg: Config,
+        creds: SteamCredentials,
+        start_time: Option<DateTime<Utc>>,
+    ) -> Result<Self, Infallible> {
+        Self::new(cfg.steam_username, cfg.pre_shared_key, creds, start_time).await
     }
 
     pub async fn run(&mut self) -> Result<(), Infallible> {
