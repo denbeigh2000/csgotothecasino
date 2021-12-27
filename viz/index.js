@@ -24,7 +24,7 @@ app.use("/viz", express.static("src"));
 app.use("/stream", proxy);
 app.use("/", proxy);
 
-open("http://localhost:7007/viz/index.html");
+open(`http://${HOST}:${PORT}/viz/index.html`);
 
 // Start the Proxy
 app.listen(PORT, HOST, () => {
