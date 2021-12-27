@@ -76,15 +76,15 @@ impl Handler {
         let float_info = self.csgofloat_client.get_bulk(&urls).await?;
 
         for item in items {
-            let pricing = self.market_price_client.get(&item.item_market_name).await?;
-            let case_pricing = self.market_price_client.get(&item.case.get_name()).await?;
+            let item_value = self.market_price_client.get(&item.item_market_name).await?;
+            let case_value = self.market_price_client.get(item.case.get_name()).await?;
             let hydrated = Unlock {
                 key: item.key.clone(),
                 case: item.case.clone(),
-                case_value: case_pricing,
+                case_value,
                 item: float_info.get(&item.item_market_link).unwrap().clone(),
 
-                item_value: pricing,
+                item_value,
                 at: item.at,
                 name: item.name.clone(),
             };
@@ -107,20 +107,20 @@ impl Handler {
         let csgofloat_info = self.csgofloat_client.get_bulk(&urls).await?;
         let mut entries = Vec::with_capacity(state.len());
         for entry in state.into_iter() {
-            let p = self
+            let item_value = self
                 .market_price_client
                 .get(&entry.item_market_name)
                 .await?;
-            let q = self.market_price_client.get(&entry.case.get_name()).await?;
+            let case_value = self.market_price_client.get(entry.case.get_name()).await?;
 
             let f = csgofloat_info.get(&entry.item_market_link).unwrap().clone();
 
             entries.push(Unlock {
                 key: entry.key,
                 case: entry.case,
-                case_value: q,
+                case_value,
                 item: f,
-                item_value: p,
+                item_value,
 
                 at: entry.at,
                 name: entry.name,

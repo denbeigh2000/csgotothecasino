@@ -311,22 +311,23 @@ impl SteamClient {
 pub struct RawMarketPrices {
     lowest_price: Option<String>,
     median_price: Option<String>,
-    #[serde(deserialize_with = "deserialize_number_from_string")]
-    volume: i32,
+    volume: String,
 }
 
 impl From<RawMarketPrices> for MarketPrices {
     fn from(raw: RawMarketPrices) -> Self {
+        let volume = raw.volume.replace(",", "").parse().unwrap();
         Self {
             lowest_price: raw.lowest_price.as_deref().map(parse_currency).flatten(),
             median_price: raw.median_price.as_deref().map(parse_currency).flatten(),
-            volume: raw.volume,
+            volume,
         }
     }
 }
 
 fn parse_currency(amt: &str) -> Option<f32> {
-    let mut chars = amt.chars();
+    let chars = amt.replace(",", "");
+    let mut chars = chars.chars();
     chars.next();
     chars.as_str().parse::<f32>().ok()
 }
@@ -346,8 +347,8 @@ pub async fn get_market_price(
         "https://steamcommunity.com/market/priceoverview/?appid=730&currency=1&market_hash_name={}",
         market_name
     );
-    let resp = client.get(url).send().await?.bytes().await?;
-    let parsed: RawMarketPrices = serde_json::from_slice(&resp)?;
+    let resp = client.get(url).send().await?.text().await?;
+    let parsed: RawMarketPrices = serde_json::from_str(&resp)?;
 
     Ok(parsed.into())
 }

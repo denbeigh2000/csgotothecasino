@@ -47,8 +47,7 @@ impl TrivialItem {
             color,
         }
     }
-    pub fn get_name(&self) -> &str
-    {
+    pub fn get_name(&self) -> &str {
         self.name.as_str()
     }
 }
