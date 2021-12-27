@@ -6,12 +6,17 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [[bin]]
+name = "collector"
+path = "src/bin/collector.rs"
+
+[[bin]]
 name = "aggregator"
 path = "src/bin/aggregator.rs"
 
 [dependencies]
 bb8-redis = "0.10"
 chrono = { version = "0.4", features = ["serde"] }
+clap = "2.34"
 futures-util = "0.3"
 hyper = { version = "0.14", features = ["http1", "server"] }
 hyper-tungstenite = "0.5"

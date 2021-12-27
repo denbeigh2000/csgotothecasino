@@ -1,5 +1,7 @@
 use chrono::{NaiveDate, TimeZone, Utc};
+use clap::{App, Arg};
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use tokio::fs;
 use tokio::io::{self, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
@@ -14,7 +16,30 @@ lazy_static::lazy_static! {
 
 #[tokio::main]
 async fn main() {
-    let config = Config::try_from_path("config.yaml").await.unwrap();
+    let args = App::new("collector")
+        .arg(
+            Arg::with_name("interval")
+                .short("-i")
+                .long("--interval-secs")
+                .help("Interval to poll Steam API")
+                .takes_value(true)
+                .default_value("30"),
+        )
+        .arg(
+            Arg::with_name("config")
+                .help("Path to configuration file")
+                .takes_value(true)
+                .default_value("./config.yaml")
+                .index(1),
+        )
+        .get_matches();
+
+    let config_path = args.value_of("config").unwrap();
+    let config = Config::try_from_path(config_path).await.unwrap();
+
+    let interval_secs = args.value_of("interval").unwrap().parse().unwrap();
+    let interval = Duration::from_secs(interval_secs);
+
     let steam_creds = if CREDS_PATH.exists() {
         load_credentials_from_file(CREDS_PATH.as_path())
             .await
@@ -28,7 +53,7 @@ async fn main() {
     let naive_start_time = NaiveDate::from_ymd(2021, 11, 21).and_hms(0, 0, 0);
     let start_time = Utc.from_local_datetime(&naive_start_time).unwrap();
 
-    Collector::from_config(config, steam_creds, Some(start_time))
+    Collector::from_config(config, steam_creds, interval, Some(start_time))
         .await
         .unwrap()
         .run()

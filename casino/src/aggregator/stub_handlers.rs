@@ -4,19 +4,13 @@ use std::time::Duration;
 use chrono::Utc;
 use futures_util::StreamExt;
 use hyper_tungstenite::hyper::header::CONTENT_TYPE;
-use hyper_tungstenite::hyper::service::{make_service_fn, service_fn};
 use hyper_tungstenite::hyper::upgrade::Upgraded;
-use hyper_tungstenite::hyper::{Body, Method, Request, Response, StatusCode};
-use hyper_tungstenite::tungstenite::Message;
-use hyper_tungstenite::{is_upgrade_request, HyperWebsocket, WebSocketStream};
-use route_recognizer::Router;
-use tokio::sync::watch::{Receiver, Sender};
+use hyper_tungstenite::hyper::{Body, Method, Request, Response};
+use hyper_tungstenite::{is_upgrade_request, WebSocketStream};
 
 use crate::aggregator::http::resp_400;
 use crate::aggregator::websocket::{handle_emit, handle_recv};
-use crate::steam::{
-    ItemDescription, MarketPrices, RawMarketPrices, TrivialItem, UnhydratedUnlock, Unlock,
-};
+use crate::steam::{ItemDescription, MarketPrices, RawMarketPrices, TrivialItem, Unlock};
 
 lazy_static::lazy_static! {
     static ref STUB_ITEM: ItemDescription = serde_json::from_str(r##"{
@@ -183,8 +177,8 @@ pub async fn handle_state(_h: &Handler, req: Request<Body>) -> Result<Response<B
 }
 
 pub async fn handle_upload(
-    h: &Handler,
-    mut req: Request<Body>,
+    _h: &Handler,
+    _req: Request<Body>,
 ) -> Result<Response<Body>, Infallible> {
     Ok(Response::builder().body(Body::empty()).unwrap())
 }

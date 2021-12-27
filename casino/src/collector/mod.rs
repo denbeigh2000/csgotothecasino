@@ -12,7 +12,6 @@ use self::config::Config;
 
 lazy_static::lazy_static! {
     static ref COLLECTION_URL: Url = "http://127.0.0.1:7000/upload".parse().unwrap();
-    static ref POLL_INTERVAL: Duration = Duration::from_secs(30);
 }
 
 pub mod config;
@@ -22,6 +21,7 @@ pub struct Collector {
     steam_client: SteamClient,
     pre_shared_key: String,
 
+    poll_interval: Duration,
     last_unboxing: Option<DateTime<Utc>>,
     last_parsed_history_id: Option<String>,
 }
@@ -31,6 +31,7 @@ impl Collector {
         steam_username: String,
         pre_shared_key: String,
         creds: SteamCredentials,
+        poll_interval: Duration,
         start_time: Option<DateTime<Utc>>,
     ) -> Result<Self, Infallible> {
         let http_client = Client::new();
@@ -40,6 +41,7 @@ impl Collector {
             steam_client,
             pre_shared_key,
 
+            poll_interval,
             last_unboxing: start_time,
             last_parsed_history_id: None,
         })
@@ -48,13 +50,21 @@ impl Collector {
     pub async fn from_config(
         cfg: Config,
         creds: SteamCredentials,
+        poll_interval: Duration,
         start_time: Option<DateTime<Utc>>,
     ) -> Result<Self, Infallible> {
-        Self::new(cfg.steam_username, cfg.pre_shared_key, creds, start_time).await
+        Self::new(
+            cfg.steam_username,
+            cfg.pre_shared_key,
+            creds,
+            poll_interval,
+            start_time,
+        )
+        .await
     }
 
     pub async fn run(&mut self) -> Result<(), Infallible> {
-        let mut tick = interval(*POLL_INTERVAL);
+        let mut tick = interval(self.poll_interval);
 
         loop {
             tokio::select! {

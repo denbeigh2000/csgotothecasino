@@ -1,6 +1,5 @@
 use core::fmt;
 use std::collections::HashMap;
-use std::convert::Infallible;
 use std::fmt::Display;
 use std::sync::Arc;
 

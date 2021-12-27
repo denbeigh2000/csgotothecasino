@@ -3,7 +3,6 @@ use std::num::ParseIntError;
 
 use chrono::{DateTime, Local, NaiveDateTime, TimeZone, Utc};
 use regex::Regex;
-use scraper::element_ref::Text;
 use scraper::{ElementRef, Html, Selector};
 use serde::{Deserialize, Serialize};
 
