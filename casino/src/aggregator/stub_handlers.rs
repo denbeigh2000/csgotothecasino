@@ -14,7 +14,7 @@ use tokio::sync::watch::{Receiver, Sender};
 
 use crate::aggregator::http::resp_400;
 use crate::aggregator::websocket::{handle_emit, handle_recv};
-use crate::steam::{ItemDescription, MarketPrices, TrivialItem, UnhydratedUnlock, Unlock};
+use crate::steam::{ItemDescription, MarketPrices, RawMarketPrices, TrivialItem, UnhydratedUnlock, Unlock};
 
 lazy_static::lazy_static! {
     static ref STUB_ITEM: ItemDescription = serde_json::from_str(r##"{
@@ -72,14 +72,14 @@ lazy_static::lazy_static! {
         "full_item_name": "Souvenir P90 | Facility Negative (Minimal Wear)"
     }"##).unwrap();
 
-    static ref STUB_ITEM_VALUE: MarketPrices = serde_json::from_str(r##"{
+    static ref STUB_ITEM_VALUE: RawMarketPrices = serde_json::from_str(r##"{
         "success": true,
         "lowest_price": "$1.81",
         "volume": "3",
         "median_price": "$1.68"
     }"##).unwrap();
 
-    static ref STUB_CASE_VALUE: MarketPrices = serde_json::from_str(r##"{
+    static ref STUB_CASE_VALUE: RawMarketPrices = serde_json::from_str(r##"{
         "success": true,
         "lowest_price": "$0.00",
         "volume": "300000",
