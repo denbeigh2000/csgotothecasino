@@ -203,11 +203,16 @@ async fn handle_upgraded_websocket<S: Stream<Item = Unlock> + Unpin>(
         tokio::select! {
             msg = ws.next() => {
                 let msg = match msg {
-                    Some(m) => m,
+                    Some(Ok(m)) => m,
+                    Some(Err(e)) => {
+                        eprintln!("error receiving message from websocket: {}", e);
+                        eprintln!("closing connection");
+                        return;
+                    },
                     None => return,
                 };
 
-                if handle_recv(msg.unwrap()).await.unwrap() {
+                if handle_recv(msg).await.unwrap() {
                     // This is a close message.
                     return;
                 }
