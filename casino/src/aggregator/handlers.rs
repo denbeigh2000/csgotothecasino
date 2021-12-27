@@ -77,9 +77,11 @@ impl Handler {
 
         for item in items {
             let pricing = self.market_price_client.get(&item.item_market_name).await?;
+            let case_pricing = self.market_price_client.get(&item.case.get_name()).await?;
             let hydrated = Unlock {
                 key: item.key.clone(),
                 case: item.case.clone(),
+                case_value: case_pricing,
                 item: float_info.get(&item.item_market_link).unwrap().clone(),
 
                 item_value: pricing,
@@ -109,12 +111,14 @@ impl Handler {
                 .market_price_client
                 .get(&entry.item_market_name)
                 .await?;
+            let q = self.market_price_client.get(&entry.case.get_name()).await?;
 
             let f = csgofloat_info.get(&entry.item_market_link).unwrap().clone();
 
             entries.push(Unlock {
                 key: entry.key,
                 case: entry.case,
+                case_value: q,
                 item: f,
                 item_value: p,
 

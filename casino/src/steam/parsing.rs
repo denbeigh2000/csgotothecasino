@@ -47,6 +47,10 @@ impl TrivialItem {
             color,
         }
     }
+    pub fn get_name(&self) -> &str
+    {
+        self.name.as_str()
+    }
 }
 
 #[derive(Debug, Hash, PartialEq, Eq, Deserialize, Serialize)]

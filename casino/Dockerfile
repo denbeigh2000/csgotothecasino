@@ -1,5 +1,8 @@
 FROM denbeigh2000/casino:base AS base
 
+COPY Cargo.lock Cargo.toml /usr/src/casino/
+COPY src /usr/src/casino/src
+
 ARG CARGO_ARGS=""
 
 RUN cargo build --bin aggregator $CARGO_ARGS

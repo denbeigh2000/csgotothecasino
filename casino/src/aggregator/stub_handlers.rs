@@ -78,6 +78,13 @@ lazy_static::lazy_static! {
         "volume": "3",
         "median_price": "$1.68"
     }"##).unwrap();
+
+    static ref STUB_CASE_VALUE: MarketPrices = serde_json::from_str(r##"{
+        "success": true,
+        "lowest_price": "$0.00",
+        "volume": "300000",
+        "median_price": "$0.00"
+    }"##).unwrap();
 }
 
 static CLUTCH_CASE_IMG: &str = "https://community.cloudflare.steamstatic.com/economy/image/-9a81dlWLwJ2UUGcVs_nsVtzdOEdtWwKGZZLQHTxDZ7I56KU0Zwwo4NUX4oFJZEHLbXU5A1PIYQNqhpOSV-fRPasw8rsUFJ5KBFZv668FFY5naqQIz4R7Yjix9bZkvKiZrmAzzlTu5AoibiT8d_x21Wy8hY_MWz1doSLMlhpM3FKbNs";
@@ -122,6 +129,7 @@ pub async fn handle_websocket(
 
 async fn send_unlock(socket: &mut WebSocketStream<Upgraded>) {
     let item_value: MarketPrices = (*STUB_ITEM_VALUE).clone().try_into().unwrap();
+    let case_value: MarketPrices = (*STUB_CASE_VALUE).clone().try_into().unwrap();
     let unlock = Unlock {
         key: Some(TrivialItem::new(
             "Clutch Case Key",
@@ -131,6 +139,7 @@ async fn send_unlock(socket: &mut WebSocketStream<Upgraded>) {
         case: TrivialItem::new("Clutch Case", CLUTCH_CASE_IMG, None),
         item: STUB_ITEM.clone(),
         item_value,
+        case_value,
 
         at: Utc::now(),
         name: "denbeigh".into(),
@@ -145,11 +154,13 @@ pub async fn handle_state(_h: &Handler, req: Request<Body>) -> Result<Response<B
     }
 
     let item_value: MarketPrices = (*STUB_ITEM_VALUE).clone().try_into().unwrap();
+    let case_value: MarketPrices = (*STUB_CASE_VALUE).clone().try_into().unwrap();
     let data = vec![Unlock {
         name: "denbeigh".into(),
         item: STUB_ITEM.clone(),
         item_value,
         case: TrivialItem::new("Clutch Case", CLUTCH_CASE_IMG, None),
+        case_value,
         key: Some(TrivialItem::new(
             "Clutch Case Key",
             CLUTCH_CASE_KEY_IMG,

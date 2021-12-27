@@ -42,6 +42,7 @@ pub struct UnhydratedUnlock {
 pub struct Unlock {
     pub key: Option<TrivialItem>,
     pub case: TrivialItem,
+    pub case_value: MarketPrices,
     pub item: ItemDescription,
     pub item_value: MarketPrices,
 
