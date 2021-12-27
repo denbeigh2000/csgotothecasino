@@ -14,7 +14,9 @@ use tokio::sync::watch::{Receiver, Sender};
 
 use crate::aggregator::http::resp_400;
 use crate::aggregator::websocket::{handle_emit, handle_recv};
-use crate::steam::{ItemDescription, MarketPrices, RawMarketPrices, TrivialItem, UnhydratedUnlock, Unlock};
+use crate::steam::{
+    ItemDescription, MarketPrices, RawMarketPrices, TrivialItem, UnhydratedUnlock, Unlock,
+};
 
 lazy_static::lazy_static! {
     static ref STUB_ITEM: ItemDescription = serde_json::from_str(r##"{

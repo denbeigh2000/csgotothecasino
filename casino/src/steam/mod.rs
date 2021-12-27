@@ -61,6 +61,7 @@ pub enum CredentialParseError {
     DoesNotResembleCookie,
 }
 
+#[derive(Debug, Deserialize, Serialize)]
 pub struct SteamCredentials {
     session_id: String,
     // NOTE: Unsure if this is required on accounts without steam guard
@@ -93,7 +94,10 @@ impl SteamCredentials {
         }
 
         match session_id {
-            Some(session_id) => Ok(Self { session_id, login_token }),
+            Some(session_id) => Ok(Self {
+                session_id,
+                login_token,
+            }),
             None => Err(CredentialParseError::NoSessionId),
         }
     }
