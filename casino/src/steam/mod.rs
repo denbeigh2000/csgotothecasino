@@ -302,10 +302,33 @@ impl SteamClient {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RawMarketPrices {
+    lowest_price: Option<String>,
+    median_price: Option<String>,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    volume: i32,
+}
+
+impl From<RawMarketPrices> for MarketPrices {
+    fn from(raw: RawMarketPrices) -> Self {
+        Self {
+            lowest_price: raw.lowest_price.as_deref().map(parse_currency).flatten(),
+            median_price: raw.median_price.as_deref().map(parse_currency).flatten(),
+            volume: raw.volume,
+        }
+    }
+}
+
+fn parse_currency(amt: &str) -> Option<f32> {
+    let mut chars = amt.chars();
+    chars.next();
+    chars.as_str().parse::<f32>().ok()
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MarketPrices {
-    #[serde(deserialize_with = "deserialize_number_from_string")]
-    lowest_price: f32,
-    #[serde(deserialize_with = "deserialize_number_from_string")]
+    lowest_price: Option<f32>,
+    median_price: Option<f32>,
     volume: i32,
 }
 
@@ -318,9 +341,9 @@ pub async fn get_market_price(
         market_name
     );
     let resp = client.get(url).send().await?.bytes().await?;
-    let parsed: MarketPrices = serde_json::from_slice(&resp)?;
+    let parsed: RawMarketPrices = serde_json::from_slice(&resp)?;
 
-    Ok(parsed)
+    Ok(parsed.into())
 }
 
 pub struct MarketPriceClient {

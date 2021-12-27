@@ -117,9 +117,11 @@ impl Store {
             None => return Ok(Vec::new()),
         };
         let redis_keys: Vec<String> = keys.iter().map(|k| format!("unlock_{}", k)).collect();
-        let values: Vec<UnhydratedUnlock> = conn.get(&redis_keys).await?;
-
-        Ok(values)
+        Ok(match redis_keys.len() {
+            0 => vec![],
+            1 => conn.get(&redis_keys.get(0).unwrap()).await?,
+            _ => conn.get(&redis_keys).await?,
+        })
     }
 
     pub async fn append_entry(&self, entry: &UnhydratedUnlock) -> Result<(), StoreError> {
