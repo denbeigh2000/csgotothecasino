@@ -1,6 +1,17 @@
 window.createDonutChart = (data) => {
   const donut_filter = (rarity) => (ev) => ev.item.rarity === rarity;
 
+  const yellow_filter = (a) =>
+    a.item &&
+    a.item.weapon_type &&
+    (a.item.weapon_type.contains("Knife") ||
+      a.item.weapon_type.contains("Bayonet") ||
+      a.item.weapon_type.contains("Daggers") ||
+      a.item.weapon_type.contains("Karambit") ||
+      a.item.weapon_type.contains("Gloves") ||
+      a.item.weapon_type.contains("Wraps"));
+  const not_yellow_filter = (a) => !yellow_filter(a);
+
   const data_donut = {
     datasets: [
       {
@@ -11,8 +22,8 @@ window.createDonutChart = (data) => {
           data.filter(donut_filter(3)).length,
           data.filter(donut_filter(4)).length,
           data.filter(donut_filter(5)).length,
-          data.filter(donut_filter(6)).length,
-          data.filter(donut_filter(7)).length,
+          data.filter(donut_filter(6)).filter(not_yellow_filter).length,
+          data.filter(donut_filter(6)).filter(yellow_filter).length,
         ],
         backgroundColor: [
           "#AFAFAF",
