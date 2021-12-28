@@ -2,19 +2,26 @@ version: "3.8"
 
 services:
   aggregator:
-    image: denbeigh2000/casino:aggregator
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: registry.digitalocean.com/csgo/aggregator:latest
     stop_signal: SIGINT
     environment:
       REDIS_URL: "redis://redis/"
     env_file: secrets.env
     ports:
-      - target: 7000
-        published: 7000
-        host_ip: 127.0.0.1
-        protocol: tcp
+      - "7000:7000"
+    volumes:
+      - './keystore.yaml:/usr/src/casino/keystore.yaml'
 
   redis:
     image: redis:6
+  
+  nginx:
+    image: registry.digitalocean.com/csgo/frontend:latest
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - '/etc/letsencrypt:/etc/letsencrypt:ro'
+      - '../viz/nginx.conf:/etc/nginx/nginx.conf:ro'
+    depends_on:
+      - aggregator
