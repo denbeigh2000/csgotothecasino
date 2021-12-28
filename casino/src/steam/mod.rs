@@ -14,6 +14,7 @@ use bb8_redis::bb8::Pool;
 use bb8_redis::redis::{IntoConnectionInfo, RedisError};
 use bb8_redis::RedisConnectionManager;
 use chrono::{DateTime, Utc};
+use hyper::header::COOKIE;
 use regex::Regex;
 use reqwest::{Client, Request, StatusCode, Url};
 use scraper::Html;
@@ -198,7 +199,13 @@ impl SteamClient {
         let cookie_str = creds.into_string();
 
         let profile_url = format!("https://steamcommunity.com/id/{}", username);
-        let profile_resp = http_client.get(&profile_url).send().await?.text().await?;
+        let profile_resp = http_client
+            .get(&profile_url)
+            .header(COOKIE, &cookie_str)
+            .send()
+            .await?
+            .text()
+            .await?;
         let parsed_profile_resp = Html::parse_document(&profile_resp);
         let user_id = get_userid(&parsed_profile_resp).unwrap();
 
@@ -373,12 +380,12 @@ impl SteamClient {
 pub struct RawMarketPrices {
     lowest_price: Option<String>,
     median_price: Option<String>,
-    volume: String,
+    volume: Option<String>,
 }
 
 impl From<RawMarketPrices> for MarketPrices {
     fn from(raw: RawMarketPrices) -> Self {
-        let volume = raw.volume.replace(",", "").parse().unwrap();
+        let volume = raw.volume.map(|v| v.replace(",", "").parse().unwrap());
         Self {
             lowest_price: raw.lowest_price.as_deref().map(parse_currency).flatten(),
             median_price: raw.median_price.as_deref().map(parse_currency).flatten(),
@@ -398,7 +405,7 @@ fn parse_currency(amt: &str) -> Option<f32> {
 pub struct MarketPrices {
     lowest_price: Option<f32>,
     median_price: Option<f32>,
-    volume: i32,
+    volume: Option<i32>,
 }
 
 pub async fn get_market_price(

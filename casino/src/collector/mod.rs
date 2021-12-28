@@ -11,7 +11,7 @@ use crate::steam::{SteamClient, SteamCredentials, UnhydratedUnlock};
 use self::config::Config;
 
 lazy_static::lazy_static! {
-    static ref COLLECTION_URL: Url = "http://127.0.0.1:7000/upload".parse().unwrap();
+    static ref COLLECTION_URL: Url = "https://casino.denb.ee/api/upload".parse().unwrap();
 }
 
 pub mod config;
