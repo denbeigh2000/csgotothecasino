@@ -105,7 +105,7 @@ impl From<HydrationError> for SaveItemsError {
 
 impl From<CsgoFloatFetchError> for SaveItemsError {
     fn from(e: CsgoFloatFetchError) -> Self {
-        e.into()
+        SaveItemsError::HydratingItem(HydrationError::FloatInfo(e))
     }
 }
 
@@ -118,7 +118,7 @@ pub enum GetStateError {
 
 impl From<serde_json::Error> for GetStateError {
     fn from(e: serde_json::Error) -> Self {
-        todo!()
+        GetStateError::SerializingItems(e)
     }
 }
 
@@ -136,7 +136,7 @@ impl From<StoreError> for GetStateError {
 
 impl From<CsgoFloatFetchError> for GetStateError {
     fn from(e: CsgoFloatFetchError) -> Self {
-        e.into()
+        GetStateError::HydratingItem(HydrationError::FloatInfo(e))
     }
 }
 
@@ -180,6 +180,7 @@ impl Handler {
         if !self.key_store.verify(&item.name, key).unwrap_or(false) {
             return Err(SaveItemsError::BadKey);
         }
+
         // ensure all entries are for the same person
         if !items.iter().all(|i| i.name == item.name) {
             return Err(SaveItemsError::PassingMultipleUsers);

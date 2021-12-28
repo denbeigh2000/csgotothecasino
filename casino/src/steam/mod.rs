@@ -416,7 +416,10 @@ pub async fn get_market_price(
         "https://steamcommunity.com/market/priceoverview/?appid=730&currency=1&market_hash_name={}",
         market_name
     );
+
     let resp = client.get(url).send().await?.text().await?;
+
+    eprintln!("market prices for {}: {}", market_name, &resp);
     let parsed: RawMarketPrices = serde_json::from_str(&resp)?;
 
     Ok(parsed.into())

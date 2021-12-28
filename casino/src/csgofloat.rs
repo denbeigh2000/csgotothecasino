@@ -46,7 +46,7 @@ pub struct ItemDescription {
     s: String,
     m: String,
     #[serde(alias = "imageurl")]
-    image_url: String,
+    image_url: Option<String>,
     min: f32,
     max: f32,
     weapon_type: String,
@@ -54,7 +54,7 @@ pub struct ItemDescription {
     rarity_name: String,
     quality_name: String,
     origin_name: String,
-    wear_name: String,
+    wear_name: Option<String>,
     full_item_name: String,
 }
 
@@ -162,12 +162,12 @@ pub async fn get_by_market_url(
     market_url: &str,
 ) -> Result<ItemDescription, CsgoFloatFetchError> {
     let url = format!("https://api.csgofloat.com?url={}", market_url);
-    let resp = client.get(url).header(AUTHORIZATION, key).send().await?;
+    let resp = client.get(&url).header(AUTHORIZATION, key).send().await?;
 
     match resp.status() {
         StatusCode::OK => {
-            let data = resp.text().await?;
-            let data: FloatItemResponse = serde_json::from_str(&data)?;
+            let data = resp.bytes().await?;
+            let data: FloatItemResponse = serde_json::from_slice(&data)?;
             Ok(data.iteminfo)
         }
         status => {
