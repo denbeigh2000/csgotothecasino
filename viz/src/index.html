@@ -30,10 +30,10 @@
       (async function () {
         var ctx = document.getElementById("chart").getContext("2d");
         const host = window.location.host;
-        const wsProto = "wss:" ? window.location.proto === "https:" : "ws:";
+        const wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
         const apiUrl = `//${window.location.host}/api`;
-        const httpApiUrl = `${window.location.proto}//${apiUrl}`;
-        const wsApiUrl = `${wsProto}//${apiUrl}/stream`;
+        const httpApiUrl = `${window.location.protocol}${apiUrl}`;
+        const wsApiUrl = `${wsProto}${apiUrl}/stream`;
 
         const res = await window.fetch(httpApiUrl);
         let data = await res.json();
