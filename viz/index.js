@@ -21,13 +21,13 @@ const proxy = createProxyMiddleware({
 });
 
 const wsProxy = createProxyMiddleware("/api/stream", {
-  target: API_SERVICE_URL,
+  target: "wss://casino.denb.ee",
   changeOrigin: true,
   logLevel: "debug",
   ws: true,
 });
 
-app.use(wsProxy);
+app.use("/api/stream", wsProxy);
 
 app.use("/viz", express.static("src"));
 app.use("/api/", proxy);

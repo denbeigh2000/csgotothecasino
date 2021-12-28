@@ -25,9 +25,9 @@ const Names = {
   Thomas: "Thomas ",
 };
 const Players = {
-  DOGGER: Names.Frank,
+  FrankDaTank159: Names.Frank,
   badcop_: Names.Sarah,
-  denbeigh: Names.Denbeigh,
+  denbeigh2000: Names.Denbeigh,
   brimonk: Names.Brian,
   Thomas: Names.Thomas,
 };

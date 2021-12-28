@@ -43,8 +43,8 @@
         //data.sort((a, b) => new Date(b.at) - new Date(a.at));
         data.reverse();
         data = data
-          // Crop our data to a 24 hour window.
-          .filter(fresh(moment(), 24, "hours"))
+          // Crop our data to a 12 hour window.
+          .filter(fresh(moment(), 12, "hours"))
           .map((a) => ({
             ...a,
             name: Players[a.name] || a.name,
