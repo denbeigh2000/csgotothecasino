@@ -1,29 +1,45 @@
-use std::convert::Infallible;
-
 use futures_util::SinkExt;
 use hyper_tungstenite::hyper::upgrade::Upgraded;
-use hyper_tungstenite::tungstenite::Message;
+use hyper_tungstenite::tungstenite::{self, Message};
 use hyper_tungstenite::WebSocketStream;
 
 use crate::steam::Unlock;
 
+#[derive(Debug)]
+pub enum MessageSendError {
+    Serde(serde_json::Error),
+    Transport(tungstenite::Error),
+}
+
+impl From<serde_json::Error> for MessageSendError {
+    fn from(e: serde_json::Error) -> Self {
+        Self::Serde(e)
+    }
+}
+
+impl From<tungstenite::Error> for MessageSendError {
+    fn from(e: tungstenite::Error) -> Self {
+        Self::Transport(e)
+    }
+}
+
 pub async fn handle_emit(
     socket: &mut WebSocketStream<Upgraded>,
     unlock: Unlock,
-) -> Result<(), Infallible> {
-    let encoded = serde_json::to_vec(&unlock).unwrap();
+) -> Result<(), MessageSendError> {
+    let encoded = serde_json::to_vec(&unlock)?;
     let msg = Message::Binary(encoded);
-    socket.send(msg).await.unwrap();
+    socket.send(msg).await?;
 
     Ok(())
 }
 
-pub async fn handle_recv(msg: Message) -> Result<bool, Infallible> {
-    Ok(match msg {
+pub fn handle_recv(msg: Message) -> bool {
+    match msg {
         Message::Close(_) => {
             eprintln!("received close, shutting down");
             true
         }
         _ => false,
-    })
+    }
 }

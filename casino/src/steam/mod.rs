@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::convert::Infallible;
 use std::sync::Arc;
 
 use crate::cache::Cache;
@@ -22,6 +21,7 @@ use serde::{Deserialize, Serialize};
 use serde_aux::field_attributes::deserialize_number_from_string;
 
 use self::errors::MarketPriceFetchError;
+use self::parsing::{AuthenticationParseError, UserIdParseError};
 
 pub mod errors;
 mod parsing;
@@ -155,6 +155,32 @@ pub struct Action {
     name: String,
 }
 
+#[derive(Debug)]
+pub enum ClientCreateError {
+    Transport(reqwest::Error),
+    NotLoggedIn,
+    AuthenticationParsing(AuthenticationParseError),
+    UserIdParsing(UserIdParseError),
+}
+
+impl From<reqwest::Error> for ClientCreateError {
+    fn from(e: reqwest::Error) -> Self {
+        Self::Transport(e)
+    }
+}
+
+impl From<AuthenticationParseError> for ClientCreateError {
+    fn from(e: AuthenticationParseError) -> Self {
+        Self::AuthenticationParsing(e)
+    }
+}
+
+impl From<UserIdParseError> for ClientCreateError {
+    fn from(e: UserIdParseError) -> Self {
+        Self::UserIdParsing(e)
+    }
+}
+
 pub struct SteamClient {
     username: String,
     user_id: u64,
@@ -166,22 +192,19 @@ pub struct SteamClient {
 }
 
 impl SteamClient {
-    pub async fn new(username: String, creds: SteamCredentials) -> Result<Self, Infallible> {
-        let http_client = Client::builder().build().unwrap();
+    pub async fn new(username: String, creds: SteamCredentials) -> Result<Self, ClientCreateError> {
+        let http_client = Client::builder().build()?;
 
         let cookie_str = creds.into_string();
 
         let profile_url = format!("https://steamcommunity.com/id/{}", username);
-        let profile_resp = http_client
-            .get(&profile_url)
-            .send()
-            .await
-            .unwrap()
-            .text()
-            .await
-            .unwrap();
+        let profile_resp = http_client.get(&profile_url).send().await?.text().await?;
         let parsed_profile_resp = Html::parse_document(&profile_resp);
         let user_id = get_userid(&parsed_profile_resp).unwrap();
+
+        if !is_authenticated(&parsed_profile_resp)? {
+            return Err(ClientCreateError::NotLoggedIn);
+        }
 
         let inventory_url = format!(
             "https://steamcommunity.com/inventory/{}/730/2?l=english&count=25",

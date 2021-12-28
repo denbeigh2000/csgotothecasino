@@ -3,9 +3,10 @@ use std::convert::Infallible;
 use futures_util::{SinkExt, Stream, StreamExt};
 use hyper::header::AUTHORIZATION;
 use hyper_tungstenite::hyper::{Body, Method, Request, Response, StatusCode};
-use hyper_tungstenite::tungstenite::Message;
+use hyper_tungstenite::tungstenite::{self, Message};
 use hyper_tungstenite::{is_upgrade_request, HyperWebsocket};
 
+use crate::aggregator::websocket::MessageSendError;
 use crate::csgofloat::{CsgoFloatClient, CsgoFloatFetchError};
 use crate::steam::errors::MarketPriceFetchError;
 use crate::steam::{MarketPriceClient, UnhydratedUnlock, Unlock};
@@ -225,10 +226,15 @@ pub async fn handle_websocket(
     Ok(resp)
 }
 
+enum WebsocketServingError {
+    Receiving(tungstenite::Error),
+    Sending(tungstenite::Error),
+}
+
 async fn handle_upgraded_websocket<S: Stream<Item = Unlock> + Unpin>(
     mut stream: S,
     ws: HyperWebsocket,
-) {
+) -> Result<(), WebsocketServingError> {
     let mut ws = ws.await.unwrap();
     loop {
         tokio::select! {
@@ -238,28 +244,35 @@ async fn handle_upgraded_websocket<S: Stream<Item = Unlock> + Unpin>(
                     Some(Err(e)) => {
                         eprintln!("error receiving message from websocket: {}", e);
                         eprintln!("closing connection");
-                        return;
+                        return Err(WebsocketServingError::Receiving(e));
                     },
-                    None => return,
+                    None => return Ok(()),
                 };
 
-                if handle_recv(msg).await.unwrap() {
-                    // This is a close message.
-                    return;
+                if handle_recv(msg) {
+                    // Client sent a close message.
+                    return Ok(());
                 }
             },
 
             unlock = stream.next() => {
-                match unlock {
-                    Some(u) => {
-                        handle_emit(&mut ws, u).await.unwrap();
-                    },
+                let unlock = match unlock {
+                    Some(u) => u,
                     None => {
                         // Server is closing, shutdown connection.
                         ws.send(Message::Close(None)).await.unwrap();
-                        return
-                    }
-                }
+                        // TODO: Send termination info?
+                        return Ok(());
+                    },
+                };
+
+                handle_emit(&mut ws, unlock).await.or_else(|e| match e {
+                    MessageSendError::Transport(e) => Err(WebsocketServingError::Sending(e)),
+                    MessageSendError::Serde(e) => {
+                        eprintln!("error marshaling message to send to client: {}", e);
+                        Ok(())
+                    },
+                })?;
             }
         }
     }

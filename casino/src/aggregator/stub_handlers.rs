@@ -109,7 +109,7 @@ pub async fn handle_websocket(
                         None => return,
                     };
 
-                    if handle_recv(msg.unwrap()).await.unwrap() {
+                    if handle_recv(msg.unwrap()) {
                         return;
                     }
                 }
