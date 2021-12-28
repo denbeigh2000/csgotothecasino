@@ -31,6 +31,53 @@ const Players = {
   brimonk: Names.Brian,
   Thomas: Names.Thomas,
 };
+
+const PlayerColors = {
+  [Names.Frank]: "#E0E722",
+  [Names.Sarah]: "#4499ff",
+  [Names.Denbeigh]: "#e055e0",
+  [Names.Brian]: "#ff6700",
+  [Names.Thomas]: "#33e033",
+};
+
+const makeRow = (item) => {
+  const image_url = item.item.image_url;
+  const div = document.createElement("div");
+  const textDiv = document.createElement("div");
+  div.setAttribute("class", "item-row");
+  textDiv.setAttribute("class", "item-info");
+  const img = document.createElement("img");
+  const name = document.createElement("p");
+  name.setAttribute("style", `color: ${rarityToColor(item.item.rarity)}`);
+  name.innerText = item.item.full_item_name || item.item.item_name || "idk";
+  const unboxer = document.createElement("p");
+  const unboxer_name = document.createElement("span");
+  unboxer_name.innerText = item.name;
+  unboxer_name.setAttribute(
+    "style",
+    `color: ${PlayerColors[item.name] || "red"}`
+  );
+  unboxer.innerText = `Unboxed by `;
+  unboxer.appendChild(unboxer_name);
+  img.setAttribute("src", image_url);
+  div.appendChild(img);
+  textDiv.appendChild(name);
+  textDiv.appendChild(unboxer);
+  div.appendChild(textDiv);
+  return div;
+};
+
+const rarityToColor = (rarity) => {
+  return [
+    "#AFAFAF",
+    "#6496E1",
+    "#4B69CD",
+    "#8847FF",
+    "#D32CE6",
+    "#EB4B4B",
+    "#CAAB05",
+  ][rarity - 1];
+};
 // Takes a `moment()` timestamp object as `now`; returns a function that will
 // determine if the given event is less than `duration` old (as of `now`).
 //
@@ -46,30 +93,8 @@ const zip = (a, b) => a.map((k, i) => [k, b[i]]);
 // Specifies some player-specific colors.
 const getPlayerDefaults = (name) => {
   const base = (name) => {
-    switch (name) {
-      case Names.Sarah:
-        return {
-          borderColor: "#4499ff",
-        };
-      case Names.Thomas:
-        return {
-          borderColor: "#33e033",
-        };
-      case Names.Denbeigh:
-        return {
-          borderColor: "#e055e0",
-        };
-      case Names.Brian:
-        return {
-          borderColor: "#ff6700",
-        };
-      case Names.Frank:
-        return {
-          borderColor: "#E0E722",
-        };
-    }
     return {
-      borderColor: "red",
+      borderColor: PlayerColors[name] || "red",
     };
   };
   return {

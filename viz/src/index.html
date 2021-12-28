@@ -1,7 +1,28 @@
 <!DOCTYPE html>
 <html>
   <meta charset="utf-8" />
-  <head></head>
+  <head>
+    <style>
+      .item-row {
+        display: flex;
+        font-family: Verdana;
+        color: #999;
+      }
+      .item-info p {
+        margin: 2px;
+      }
+      .item-info {
+        display: flex;
+        flex-direction: column;
+        align-content: stretch;
+        justify-content: center;
+      }
+      .item-row img {
+        height: 96px;
+        padding-right: 12px;
+      }
+    </style>
+  </head>
 
   <body>
     <div id="main">
@@ -14,6 +35,8 @@
     <script src="./views/timeseries.js"></script>
     <script src="./views/donut.js"></script>
     <script src="./views/most_expensive.js"></script>
+    <script src="./views/table.js"></script>
+    <script src="./views/radar.js"></script>
 
     <script>
       /*
@@ -80,7 +103,12 @@
           socket.addEventListener("message", async (e) => {
             const server_text = await e.data.text();
             console.warn(server_text);
-            if (update) update(chart, JSON.parse(server_text));
+            const parsed = JSON.parse(server_text);
+            if (update)
+              update(chart, {
+                ...parsed,
+                name: Players[parsed.name] || parsed.name,
+              });
           });
           socket.addEventListener("close", () => {
             console.error(

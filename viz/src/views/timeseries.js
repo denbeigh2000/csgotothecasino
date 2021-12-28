@@ -128,8 +128,8 @@ window.createTimeseriesChart = (data) => {
           },
         },
         y: {
-          suggestedMin: -40,
-          suggestedMax: 40,
+          suggestedMin: -50,
+          suggestedMax: 10,
           grid: {
             lineWidth: 2,
             color: (ctx) => {

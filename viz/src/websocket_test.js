@@ -141,8 +141,8 @@ const testWebsocket_FAKE_DATA = (name) => (chart, update) => {
           full_item_name: "MP7 | Guerrilla (Field-Tested)",
         },
         item_value: {
-          lowest_price: (Math.random() - 0.2) * 40,
-          median_price: (Math.random() - 0.2) * 50,
+          lowest_price: (Math.random() - 0.8) * 40,
+          median_price: (Math.random() - 0.8) * 50,
           volume: 505,
         },
         at: Date.now(),

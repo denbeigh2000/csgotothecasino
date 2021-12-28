@@ -4,12 +4,12 @@ window.createDonutChart = (data) => {
   const yellow_filter = (a) =>
     a.item &&
     a.item.weapon_type &&
-    (a.item.weapon_type.contains("Knife") ||
-      a.item.weapon_type.contains("Bayonet") ||
-      a.item.weapon_type.contains("Daggers") ||
-      a.item.weapon_type.contains("Karambit") ||
-      a.item.weapon_type.contains("Gloves") ||
-      a.item.weapon_type.contains("Wraps"));
+    (a.item.weapon_type.includes("Knife") ||
+      a.item.weapon_type.includes("Bayonet") ||
+      a.item.weapon_type.includes("Daggers") ||
+      a.item.weapon_type.includes("Karambit") ||
+      a.item.weapon_type.includes("Gloves") ||
+      a.item.weapon_type.includes("Wraps"));
   const not_yellow_filter = (a) => !yellow_filter(a);
 
   const data_donut = {
