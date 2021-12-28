@@ -1,4 +1,4 @@
-const testWebsocket_FAKE_DATA = (chart, update) => {
+const testWebsocket_FAKE_DATA = (name) => (chart, update) => {
   console.warn("FAKE DATA ENABLED");
   window.setTimeout(() => {
     update(chart, {
@@ -45,7 +45,7 @@ const testWebsocket_FAKE_DATA = (chart, update) => {
       },
       item_value: { lowest_price: 4.52, median_price: 4.07, volume: 127 },
       at: Date.now(),
-      name: "badcop_",
+      name,
     });
   }, 2500);
   window.setTimeout(() => {
@@ -93,7 +93,7 @@ const testWebsocket_FAKE_DATA = (chart, update) => {
       },
       item_value: { lowest_price: 0.08, median_price: 0.06, volume: 505 },
       at: Date.now(),
-      name: "badcop_",
+      name,
     });
   }, 10000);
   window.setTimeout(() => {
@@ -146,8 +146,8 @@ const testWebsocket_FAKE_DATA = (chart, update) => {
           volume: 505,
         },
         at: Date.now(),
-        name: "badcop_",
+        name,
       });
-    }, 5000);
+    }, 10000);
   }, 20000);
 };

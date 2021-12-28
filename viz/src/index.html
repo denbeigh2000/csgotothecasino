@@ -19,7 +19,8 @@
         Controls whether mock data flows down the websocket or not.
         TODO: DISABLE THIS BEFORE PRODUCTIONIZING
       */
-      const DEBUG = true;
+      const DEBUG = false;
+
       /*
         hello reader! this file is the entrypoint to the viz. By default, the timeseries view will show.
         The relevant code for this view is in 'views/timeseries.js'.
@@ -43,20 +44,28 @@
         data = data
           // Crop our data to a 24 hour window.
           .filter(fresh(moment(), 24, "hours"))
-          // TODO: TAKE THIS OUT ONCE BACKEND TIMEZONES ARE FIXED:
-          .map((a) => ({ ...a, at: a.at.replace("Z", "-0800") }));
+          .map((a) => ({
+            ...a,
+            name: Players[a.name] || a.name,
+          }));
 
         console.log(data);
 
         const word = (window.location.hash || "timeseries").replace("#", "");
         const func =
           "create" + (word.charAt(0).toUpperCase() + word.slice(1)) + "Chart";
-        console.log(func);
-        const { config, update } = window[func](data);
-        var chart = new Chart(ctx, config);
+        const { config, update, init } = window[func](data);
+        if (config) {
+          var chart = new Chart(ctx, config);
+        }
+        if (init) {
+          init();
+        }
 
         if (update && DEBUG) {
-          testWebsocket_FAKE_DATA(chart, update);
+          Object.entries(Players).forEach(([username, player]) => {
+            testWebsocket_FAKE_DATA(player)(chart, update);
+          });
         }
 
         function openSocket() {

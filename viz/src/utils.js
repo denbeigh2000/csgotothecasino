@@ -17,6 +17,20 @@ const sum_over_time = (arr) => {
   return result;
 };
 
+const Names = {
+  Sarah: "Sarah ",
+  Frank: "Frank ",
+  Denbeigh: "Denbeigh ",
+  Brian: "Brian ",
+  Thomas: "Thomas ",
+};
+const Players = {
+  DOGGER: Names.Frank,
+  badcop_: Names.Sarah,
+  denbeigh: Names.Denbeigh,
+  brimonk: Names.Brian,
+  Thomas: Names.Thomas,
+};
 // Takes a `moment()` timestamp object as `now`; returns a function that will
 // determine if the given event is less than `duration` old (as of `now`).
 //
@@ -30,21 +44,45 @@ const fresh = (now, duration, unit) => (ev) =>
 const zip = (a, b) => a.map((k, i) => [k, b[i]]);
 
 // Specifies some player-specific colors.
-const getPlayerColors = (name) => {
-  switch (name) {
-    case "badcop_":
-      return {
-        borderColor: "blue",
-        backgroundColor: "#0000ff20",
-        fill: {
-          above: "#00aa0020",
-          below: "#ff000020",
-          target: { value: 0 },
-        },
-      };
-  }
+const getPlayerDefaults = (name) => {
+  const base = (name) => {
+    switch (name) {
+      case Names.Sarah:
+        return {
+          borderColor: "#4499ff",
+        };
+      case Names.Thomas:
+        return {
+          borderColor: "#33e033",
+        };
+      case Names.Denbeigh:
+        return {
+          borderColor: "#e055e0",
+        };
+      case Names.Brian:
+        return {
+          borderColor: "#ff6700",
+        };
+      case Names.Frank:
+        return {
+          borderColor: "#E0E722",
+        };
+    }
+    return {
+      borderColor: "red",
+    };
+  };
   return {
-    borderColor: "red",
-    backgroundColor: "#ff000020",
+    ...base(name),
+    backgroundColor: "#222",
+    cubicInterpolationMode: "monotone",
+    tension: 0.4,
+    borderWidth: 6,
+    pointRadius: 7,
+    // fill: {
+    //   above: "#00aa0020",
+    //   below: "#ff000020",
+    //   target: { value: 0 },
+    // },
   };
 };

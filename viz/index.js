@@ -9,7 +9,7 @@ const app = express();
 // Configuration
 const PORT = 7007;
 const HOST = "localhost";
-const API_SERVICE_URL = "http://localhost:7000";
+const API_SERVICE_URL = "https://casino.denb.ee";
 
 // Logging
 app.use(morgan("dev"));
@@ -20,7 +20,7 @@ const proxy = createProxyMiddleware({
   changeOrigin: true,
 });
 
-const wsProxy = createProxyMiddleware("/stream", {
+const wsProxy = createProxyMiddleware("/api/stream", {
   target: API_SERVICE_URL,
   changeOrigin: true,
   logLevel: "debug",
@@ -30,7 +30,7 @@ const wsProxy = createProxyMiddleware("/stream", {
 app.use(wsProxy);
 
 app.use("/viz", express.static("src"));
-app.use("/", proxy);
+app.use("/api/", proxy);
 
 open(`http://${HOST}:${PORT}/viz/index.html`);
 

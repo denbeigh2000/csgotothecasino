@@ -1,4 +1,5 @@
 window.createTimeseriesChart = (data) => {
+  document.body.style.backgroundColor = "#222";
   groups = new Set();
   const grouped = {};
   data.forEach((d) => groups.add(d.name));
@@ -8,6 +9,8 @@ window.createTimeseriesChart = (data) => {
       sum_over_time(data.filter((d) => d.name === k).map(value_estimator))
     ).map(([date, n]) => ({ x: date, y: n }));
   }
+
+  console.log(grouped);
 
   const animation = {
     x: {
@@ -60,9 +63,7 @@ window.createTimeseriesChart = (data) => {
     datasets: Object.entries(grouped).map(([group, group_data]) => ({
       label: group,
       data: group_data,
-      cubicInterpolationMode: "monotone",
-      tension: 0.4,
-      ...getPlayerColors(group),
+      ...getPlayerDefaults(group),
     })),
   };
   const config = {
@@ -70,12 +71,18 @@ window.createTimeseriesChart = (data) => {
     data: chart_data,
     options: {
       animations: animation,
-      interaction: {
-        mode: "nearest",
-        axis: "x",
-        intersect: false,
-      },
+      events: [],
       plugins: {
+        legend: {
+          labels: {
+            boxWidth: 10,
+            boxHeight: 10,
+            usePointStyle: true,
+            font: {
+              size: 30,
+            },
+          },
+        },
         zoom: {
           pan: {
             enabled: true,
@@ -106,6 +113,14 @@ window.createTimeseriesChart = (data) => {
       },
       scales: {
         x: {
+          ticks: {
+            font: {
+              size: 24,
+            },
+          },
+          grid: {
+            lineWidth: 2,
+          },
           type: "realtime",
           realtime: {
             duration: 400000,
@@ -113,9 +128,21 @@ window.createTimeseriesChart = (data) => {
           },
         },
         y: {
-          suggestedMin: -100,
-          suggestedMax: 100,
+          suggestedMin: -40,
+          suggestedMax: 40,
+          grid: {
+            lineWidth: 2,
+            color: (ctx) => {
+              if (ctx.tick.value === 0) {
+                return "#602020";
+              }
+              return "#1e1e1e";
+            },
+          },
           ticks: {
+            font: {
+              size: 24,
+            },
             // Include a dollar sign in the ticks
             callback: function (value, index, ticks) {
               // call the default formatter, forwarding `this`
@@ -136,8 +163,10 @@ window.createTimeseriesChart = (data) => {
 
   // Callback function to update the chart when events arrive via the websocket.
   const update = (chart, event) => {
+    let found = false;
     for (let i = 0; i < chart_data.datasets.length; ++i) {
       if (chart_data.datasets[i].label === event.name) {
+        found = true;
         const a = chart_data.datasets[i].data;
         const { last, ...last_val } = a[a.length - 1];
         const datum = {
@@ -147,6 +176,17 @@ window.createTimeseriesChart = (data) => {
         };
         chart_data.datasets[i].data.push(datum);
       }
+    }
+    if (!found) {
+      const datum = {
+        x: new Date(event.at),
+        y: value_estimator(event),
+      };
+      chart_data.datasets.push({
+        label: event.name,
+        data: [datum],
+        ...getPlayerDefaults(event.name),
+      });
     }
     chart.update();
   };
