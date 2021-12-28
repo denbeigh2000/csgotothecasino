@@ -29,8 +29,13 @@
       */
       (async function () {
         var ctx = document.getElementById("chart").getContext("2d");
+        const host = window.location.host;
+        const wsProto = "wss:" ? window.location.proto === "https:" : "ws:";
+        const apiUrl = `//${window.location.host}/api`;
+        const httpApiUrl = `${window.location.proto}//${apiUrl}`;
+        const wsApiUrl = `${wsProto}//${apiUrl}/stream`;
 
-        const res = await window.fetch("http://localhost:7007");
+        const res = await window.fetch(httpApiUrl);
         let data = await res.json();
         // uncomment to piss denbeigh off
         //data.sort((a, b) => new Date(b.at) - new Date(a.at));
@@ -55,7 +60,7 @@
         }
 
         function openSocket() {
-          const socket = new WebSocket("ws://localhost:7007/stream");
+          const socket = new WebSocket(wsApiUrl);
           socket.addEventListener("open", () => {
             console.log("websocket opened");
             window.setInterval(() => {
