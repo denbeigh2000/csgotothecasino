@@ -10,21 +10,12 @@ mod http;
 pub mod keystore;
 mod websocket;
 
-#[cfg(feature = "not-stub")]
 mod handlers;
-#[cfg(feature = "not-stub")]
 pub use crate::aggregator::handlers::Handler;
-#[cfg(feature = "not-stub")]
 use crate::aggregator::handlers::{handle_state, handle_upload, handle_websocket};
 
-#[cfg(not(feature = "not-stub"))]
-mod stub_handlers;
-#[cfg(not(feature = "not-stub"))]
-pub use crate::aggregator::stub_handlers::Handler;
-#[cfg(not(feature = "not-stub"))]
-use crate::aggregator::stub_handlers::{handle_state, handle_upload, handle_websocket};
-
-use crate::aggregator::http::{resp_404, router, Route};
+use crate::aggregator::handlers::HandlerError;
+use crate::aggregator::http::{resp_404, resp_500, router, Route};
 
 lazy_static::lazy_static! {
     static ref ROUTER: Router<Route> = router();
@@ -66,11 +57,21 @@ pub async fn serve(handler: Handler) -> Result<(), Infallible> {
 
 async fn handle_request(h: &Handler, req: Request<Body>) -> Result<Response<Body>, Infallible> {
     match ROUTER.recognize(req.uri().path()) {
-        Ok(m) => Ok(match m.handler() {
-            Route::State => handle_state(h, req).await.unwrap(),
-            Route::Stream => handle_websocket(h, req).await.unwrap(),
-            Route::Upload => handle_upload(h, req).await.unwrap(),
-        }),
+        Ok(m) => {
+            let resp = match m.handler() {
+                Route::State => handle_state(h, req).await.map_err(HandlerError::GetState),
+                Route::Stream => handle_websocket(h, req)
+                    .await
+                    .map_err(HandlerError::StreamItems),
+                Route::Upload => handle_upload(h, req).await.map_err(HandlerError::SaveItems),
+            }
+            .unwrap_or_else(|e| {
+                eprintln!("error serving request: {:?}", e);
+                resp_500()
+            });
+
+            Ok(resp)
+        }
         Err(_) => Ok(resp_404()),
     }
 }

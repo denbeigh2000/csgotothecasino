@@ -1,4 +1,4 @@
-use std::convert::Infallible;
+use std::fmt::{self, Display};
 
 use futures_util::{SinkExt, Stream, StreamExt};
 use hyper::header::AUTHORIZATION;
@@ -6,6 +6,7 @@ use hyper_tungstenite::hyper::{Body, Method, Request, Response, StatusCode};
 use hyper_tungstenite::tungstenite::{self, Message};
 use hyper_tungstenite::{is_upgrade_request, HyperWebsocket};
 
+use crate::aggregator::http::resp_500;
 use crate::aggregator::websocket::MessageSendError;
 use crate::csgofloat::{CsgoFloatClient, CsgoFloatFetchError};
 use crate::steam::errors::MarketPriceFetchError;
@@ -16,43 +17,135 @@ use super::http::{resp_400, resp_403};
 use super::keystore::KeyStore;
 use super::websocket::{handle_emit, handle_recv};
 
+// TODO: Should this be broken up per-operation?
 #[derive(Debug)]
 pub enum HandlerError {
-    BadKey,
-    Transport(hyper::Error),
-    Store(StoreError),
-    MarketPrice(MarketPriceFetchError),
-    CsgoFloat(CsgoFloatFetchError),
-    Serde(serde_json::Error),
+    GetState(GetStateError),
+    SaveItems(SaveItemsError),
+    StreamItems(StreamError),
 }
 
-impl From<StoreError> for HandlerError {
-    fn from(e: StoreError) -> Self {
-        Self::Store(e)
-    }
+// impl Display for HandlerError {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         match self {
+//             Self::BadKey => write!(f, "missing/invalid pre-shared key"),
+//             Self::Transport(e) => write!(f, "http error: {}", e),
+//             Self::Store(e) => write!(f, "error using store: {}", e),
+//             Self::MarketPrice(e) => write!(f, "error fetching market prices: {}", e),
+//             Self::CsgoFloat(e) => write!(f, "error fetching data from csgofloat: {}", e),
+//             Self::Serde(e) => write!(f, "error serialising/deserialising: {}", e),
+//         }
+//     }
+// }
+
+// impl From<StoreError> for HandlerError {
+//     fn from(e: StoreError) -> Self {
+//         Self::Store(e)
+//     }
+// }
+//
+// impl From<MarketPriceFetchError> for HandlerError {
+//     fn from(e: MarketPriceFetchError) -> Self {
+//         Self::MarketPrice(e)
+//     }
+// }
+//
+// impl From<CsgoFloatFetchError> for HandlerError {
+//     fn from(e: CsgoFloatFetchError) -> Self {
+//         Self::CsgoFloat(e)
+//     }
+// }
+//
+// impl From<serde_json::Error> for HandlerError {
+//     fn from(e: serde_json::Error) -> Self {
+//         Self::Serde(e)
+//     }
+// }
+//
+// impl From<hyper::Error> for HandlerError {
+//     fn from(e: hyper::Error) -> Self {
+//         Self::Transport(e)
+//     }
+// }
+
+#[derive(Debug)]
+pub enum HydrationError {
+    CasePrice(MarketPriceFetchError),
+    ItemPrice(MarketPriceFetchError),
+    FloatInfo(CsgoFloatFetchError),
 }
 
-impl From<MarketPriceFetchError> for HandlerError {
-    fn from(e: MarketPriceFetchError) -> Self {
-        Self::MarketPrice(e)
-    }
-}
-
-impl From<CsgoFloatFetchError> for HandlerError {
+impl From<CsgoFloatFetchError> for HydrationError {
     fn from(e: CsgoFloatFetchError) -> Self {
-        Self::CsgoFloat(e)
+        Self::FloatInfo(e)
     }
 }
 
-impl From<serde_json::Error> for HandlerError {
-    fn from(e: serde_json::Error) -> Self {
-        Self::Serde(e)
-    }
+#[derive(Debug)]
+pub enum SaveItemsError {
+    BadKey,
+    PassingMultipleUsers,
+    HydratingItem(HydrationError),
+    SavingItem(StoreError),
+    PublishingItem(StoreError),
+    Transport(hyper::Error),
 }
 
-impl From<hyper::Error> for HandlerError {
+impl From<hyper::Error> for SaveItemsError {
     fn from(e: hyper::Error) -> Self {
         Self::Transport(e)
+    }
+}
+
+impl From<HydrationError> for SaveItemsError {
+    fn from(e: HydrationError) -> Self {
+        Self::HydratingItem(e)
+    }
+}
+
+impl From<CsgoFloatFetchError> for SaveItemsError {
+    fn from(e: CsgoFloatFetchError) -> Self {
+        e.into()
+    }
+}
+
+#[derive(Debug)]
+pub enum GetStateError {
+    HydratingItem(HydrationError),
+    FetchingItems(StoreError),
+    SerializingItems(serde_json::Error),
+}
+
+impl From<serde_json::Error> for GetStateError {
+    fn from(e: serde_json::Error) -> Self {
+        todo!()
+    }
+}
+
+impl From<HydrationError> for GetStateError {
+    fn from(e: HydrationError) -> Self {
+        Self::HydratingItem(e)
+    }
+}
+
+impl From<StoreError> for GetStateError {
+    fn from(e: StoreError) -> Self {
+        Self::FetchingItems(e)
+    }
+}
+
+impl From<CsgoFloatFetchError> for GetStateError {
+    fn from(e: CsgoFloatFetchError) -> Self {
+        e.into()
+    }
+}
+
+#[derive(Debug)]
+pub struct StreamError(StoreError);
+
+impl From<StoreError> for StreamError {
+    fn from(e: StoreError) -> Self {
+        StreamError(e)
     }
 }
 
@@ -78,26 +171,35 @@ impl Handler {
         }
     }
 
-    pub async fn save(&self, key: &str, items: &[UnhydratedUnlock]) -> Result<(), HandlerError> {
+    pub async fn save(&self, key: &str, items: &[UnhydratedUnlock]) -> Result<(), SaveItemsError> {
         if items.is_empty() {
             return Ok(());
         }
 
         let item = items.get(0).unwrap();
         if !self.key_store.verify(&item.name, key).unwrap_or(false) {
-            return Err(HandlerError::BadKey);
+            return Err(SaveItemsError::BadKey);
         }
         // ensure all entries are for the same person
         if !items.iter().all(|i| i.name == item.name) {
-            return Err(HandlerError::BadKey);
+            return Err(SaveItemsError::PassingMultipleUsers);
         }
 
         let urls: Vec<&str> = items.iter().map(|i| i.item_market_link.as_str()).collect();
         let float_info = self.csgofloat_client.get_bulk(&urls).await?;
 
         for item in items {
-            let item_value = self.market_price_client.get(&item.item_market_name).await?;
-            let case_value = self.market_price_client.get(item.case.get_name()).await?;
+            let item_value = self
+                .market_price_client
+                .get(&item.item_market_name)
+                .await
+                .map_err(HydrationError::ItemPrice)?;
+            let case_value = self
+                .market_price_client
+                .get(item.case.get_name())
+                .await
+                .map_err(HydrationError::CasePrice)?;
+
             let hydrated = Unlock {
                 key: item.key.clone(),
                 case: item.case.clone(),
@@ -109,14 +211,20 @@ impl Handler {
                 name: item.name.clone(),
             };
 
-            self.store.append_entry(item).await?;
-            self.store.publish(&hydrated).await?;
+            self.store
+                .append_entry(item)
+                .await
+                .map_err(SaveItemsError::SavingItem)?;
+            self.store
+                .publish(&hydrated)
+                .await
+                .map_err(SaveItemsError::PublishingItem)?;
         }
 
         Ok(())
     }
 
-    pub async fn get_state(&self) -> Result<Vec<Unlock>, HandlerError> {
+    pub async fn get_state(&self) -> Result<Vec<Unlock>, GetStateError> {
         let state = self.store.get_entries().await?;
         if state.is_empty() {
             return Ok(vec![]);
@@ -130,8 +238,13 @@ impl Handler {
             let item_value = self
                 .market_price_client
                 .get(&entry.item_market_name)
-                .await?;
-            let case_value = self.market_price_client.get(entry.case.get_name()).await?;
+                .await
+                .map_err(HydrationError::ItemPrice)?;
+            let case_value = self
+                .market_price_client
+                .get(entry.case.get_name())
+                .await
+                .map_err(HydrationError::CasePrice)?;
 
             let f = csgofloat_info.get(&entry.item_market_link).unwrap().clone();
 
@@ -150,14 +263,17 @@ impl Handler {
         Ok(entries)
     }
 
-    pub async fn event_stream(&self) -> Result<impl Stream<Item = Unlock>, HandlerError> {
+    pub async fn event_stream(&self) -> Result<impl Stream<Item = Unlock>, StreamError> {
         let stream = self.store.get_event_stream().await?;
 
         Ok(stream)
     }
 }
 
-pub async fn handle_state(h: &Handler, req: Request<Body>) -> Result<Response<Body>, HandlerError> {
+pub async fn handle_state(
+    h: &Handler,
+    req: Request<Body>,
+) -> Result<Response<Body>, GetStateError> {
     if req.method() != Method::GET {
         return Ok(resp_400());
     }
@@ -172,7 +288,7 @@ pub async fn handle_state(h: &Handler, req: Request<Body>) -> Result<Response<Bo
 pub async fn handle_upload(
     h: &Handler,
     mut req: Request<Body>,
-) -> Result<Response<Body>, HandlerError> {
+) -> Result<Response<Body>, SaveItemsError> {
     if req.method() != Method::POST {
         eprintln!("bad request type");
         return Ok(resp_400());
@@ -197,7 +313,9 @@ pub async fn handle_upload(
         Err(e) => {
             eprintln!("saving failed: {:?}", e);
             match e {
-                HandlerError::BadKey => StatusCode::UNAUTHORIZED,
+                SaveItemsError::BadKey | SaveItemsError::PassingMultipleUsers => {
+                    StatusCode::UNAUTHORIZED
+                }
                 _ => StatusCode::INTERNAL_SERVER_ERROR,
             }
         }
@@ -214,28 +332,54 @@ pub async fn handle_upload(
 pub async fn handle_websocket(
     h: &Handler,
     req: Request<Body>,
-) -> Result<Response<Body>, Infallible> {
+) -> Result<Response<Body>, StreamError> {
     if !is_upgrade_request(&req) {
         return Ok(resp_400());
     }
 
+    let stream = match h.event_stream().await {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error opening event stream: {:?}", e);
+            return Ok(resp_500());
+        }
+    };
+
     let (resp, socket) = hyper_tungstenite::upgrade(req, None).unwrap();
-    let stream = h.event_stream().await.unwrap();
-    tokio::spawn(handle_upgraded_websocket(Box::pin(stream), socket));
+    tokio::spawn(spawn_handle_websocket(Box::pin(stream), socket));
 
     Ok(resp)
 }
 
+#[derive(Debug)]
 enum WebsocketServingError {
+    Upgrading(tungstenite::Error),
     Receiving(tungstenite::Error),
     Sending(tungstenite::Error),
+}
+
+impl Display for WebsocketServingError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Upgrading(e) => write!(f, "error upgrading: {}", e),
+            Self::Receiving(e) => write!(f, "error receiving message: {}", e),
+            Self::Sending(e) => write!(f, "error sending message: {}", e),
+        }
+    }
+}
+
+async fn spawn_handle_websocket<S: Stream<Item = Unlock> + Unpin>(stream: S, ws: HyperWebsocket) {
+    if let Err(e) = handle_upgraded_websocket(stream, ws).await {
+        eprintln!("error serving websocket: {}", e);
+    }
 }
 
 async fn handle_upgraded_websocket<S: Stream<Item = Unlock> + Unpin>(
     mut stream: S,
     ws: HyperWebsocket,
 ) -> Result<(), WebsocketServingError> {
-    let mut ws = ws.await.unwrap();
+    let mut ws = ws.await.map_err(WebsocketServingError::Upgrading)?;
+
     loop {
         tokio::select! {
             msg = ws.next() => {

@@ -5,12 +5,6 @@ async fn main() {
     real_main().await;
 }
 
-#[cfg(not(feature = "not-stub"))]
-async fn real_main() {
-    serve(Handler::default()).await.unwrap();
-}
-
-#[cfg(feature = "not-stub")]
 async fn real_main() {
     use std::env;
 

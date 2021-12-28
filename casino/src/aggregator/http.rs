@@ -1,6 +1,10 @@
 use hyper_tungstenite::hyper::{Body, Response};
 use route_recognizer::Router;
 
+pub fn resp_500() -> Response<Body> {
+    Response::builder().status(500).body(Body::empty()).unwrap()
+}
+
 pub fn resp_404() -> Response<Body> {
     Response::builder().status(404).body(Body::empty()).unwrap()
 }

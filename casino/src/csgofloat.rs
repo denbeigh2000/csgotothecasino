@@ -112,6 +112,17 @@ pub enum CsgoFloatFetchError {
     SteamURLFormat(SteamURLParseError),
 }
 
+impl Display for CsgoFloatFetchError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::CsgoFloat(e) => write!(f, "error from api: {}", e),
+            Self::Transport(e) => write!(f, "http error: {}", e),
+            Self::Deserializing(e) => write!(f, "deserialisation error: {}", e),
+            Self::SteamURLFormat(e) => write!(f, "error parsing steam url: {}", e),
+        }
+    }
+}
+
 impl From<SteamURLParseError> for CsgoFloatFetchError {
     fn from(e: SteamURLParseError) -> Self {
         Self::SteamURLFormat(e)
@@ -122,6 +133,15 @@ impl From<SteamURLParseError> for CsgoFloatFetchError {
 pub enum SteamURLParseError {
     MissingAssetMarker,
     MissingDMarker,
+}
+
+impl Display for SteamURLParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::MissingAssetMarker => write!(f, "url missing \"A\" marker"),
+            Self::MissingDMarker => write!(f, "url missing \"D\" marker"),
+        }
+    }
 }
 
 impl From<reqwest::Error> for CsgoFloatFetchError {

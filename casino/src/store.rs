@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::{
+    fmt::{self, Display},
+    sync::Arc,
+};
 
 use bb8_redis::bb8::{Pool, PooledConnection, RunError};
 pub use bb8_redis::redis::aio::Connection;
@@ -64,6 +67,16 @@ pub enum StoreError {
     ConnectionTimeout,
     RedisError(RedisError),
     SerdeError(serde_json::Error),
+}
+
+impl Display for StoreError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ConnectionTimeout => write!(f, "connection timeout"),
+            Self::RedisError(e) => write!(f, "error interacting with redis: {}", e),
+            Self::SerdeError(e) => write!(f, "error serialising/deserialising: {}", e),
+        }
+    }
 }
 
 impl From<RunError<RedisError>> for StoreError {

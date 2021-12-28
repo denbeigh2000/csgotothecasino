@@ -1,3 +1,5 @@
+use std::fmt::{self, Display};
+
 use hyper::StatusCode;
 
 use super::parsing::{AuthenticationParseError, ParseFailure};
@@ -83,18 +85,27 @@ impl From<serde_json::Error> for PrepareItemsError {
 
 #[derive(Debug)]
 pub enum MarketPriceFetchError {
-    TransportError(reqwest::Error),
-    DeserializeError(serde_json::Error),
+    Transport(reqwest::Error),
+    Deserializing(serde_json::Error),
+}
+
+impl Display for MarketPriceFetchError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Transport(e) => write!(f, "http error: {}", e),
+            Self::Deserializing(e) => write!(f, "error deserialising market prices: {}", e),
+        }
+    }
 }
 
 impl From<reqwest::Error> for MarketPriceFetchError {
     fn from(e: reqwest::Error) -> Self {
-        Self::TransportError(e)
+        Self::Transport(e)
     }
 }
 
 impl From<serde_json::Error> for MarketPriceFetchError {
     fn from(e: serde_json::Error) -> Self {
-        Self::DeserializeError(e)
+        Self::Deserializing(e)
     }
 }

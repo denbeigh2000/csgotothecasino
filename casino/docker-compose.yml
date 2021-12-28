@@ -4,8 +4,6 @@ services:
   aggregator:
     image: denbeigh2000/casino:aggregator
     build:
-      args:
-        CARGO_ARGS: "--features=not-stub"
       context: .
       dockerfile: Dockerfile
     stop_signal: SIGINT
