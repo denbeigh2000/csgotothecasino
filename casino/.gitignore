@@ -18,3 +18,5 @@ Cargo.lock
 
 secrets.env
 .creds.json
+config.yaml
+keystore.yaml

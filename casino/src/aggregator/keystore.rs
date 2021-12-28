@@ -27,6 +27,7 @@ impl KeyStore {
     }
 }
 
+#[derive(Debug)]
 pub enum KeyStoreLoadSaveError {
     IO(io::Error),
     Serde(serde_yaml::Error),

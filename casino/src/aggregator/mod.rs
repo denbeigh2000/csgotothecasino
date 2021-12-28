@@ -1,5 +1,4 @@
 use std::convert::Infallible;
-use std::future::Future;
 use std::sync::Arc;
 
 use hyper_tungstenite::hyper::server::conn::AddrStream;
@@ -37,23 +36,22 @@ async fn ctrl_c() {
     eprintln!("shutting down");
 }
 
-pub async fn serve<F, Fut>(make_handler: F) -> Result<(), Infallible>
-where
-    Fut: Future<Output = Handler> + Send + 'static,
-    F: Fn() -> Fut + Copy + Send + Sync + 'static,
-{
-    let svc = make_service_fn(|_socket: &AddrStream| async move {
-        let h = make_handler().await;
-        let h = Arc::new(h);
+pub async fn serve(handler: Handler) -> Result<(), Infallible> {
+    let h = Arc::new(handler);
 
-        Ok::<_, Infallible>(service_fn(move |req| {
-            let h = Arc::clone(&h);
-            async move {
-                let resp: Result<Response<Body>, Infallible> = handle_request(&*h, req).await;
+    let svc = make_service_fn(move |_socket: &AddrStream| {
+        let h = h.clone();
 
-                resp
-            }
-        }))
+        async move {
+            Ok::<_, Infallible>(service_fn(move |req| {
+                let h = Arc::clone(&h);
+                async move {
+                    let resp: Result<Response<Body>, Infallible> = handle_request(&*h, req).await;
+
+                    resp
+                }
+            }))
+        }
     });
 
     let addr = "0.0.0.0:7000".parse().unwrap();
