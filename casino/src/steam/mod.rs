@@ -16,6 +16,7 @@ use bb8_redis::redis::{IntoConnectionInfo, RedisError};
 use bb8_redis::RedisConnectionManager;
 use chrono::{DateTime, Utc};
 use hyper::header::COOKIE;
+use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use regex::Regex;
 use reqwest::{Client, Request, StatusCode, Url};
 use scraper::Html;
@@ -84,6 +85,14 @@ pub struct SteamCredentials {
     login_token: Option<String>,
 }
 
+fn maybe_url_encode(s: String) -> String {
+    if s.contains('%') {
+        return s;
+    }
+
+    return utf8_percent_encode(s.as_str(), NON_ALPHANUMERIC).to_string();
+}
+
 impl SteamCredentials {
     pub fn new(session_id: String, login_token: String) -> Self {
         let login_token = Some(login_token);
@@ -104,7 +113,7 @@ impl SteamCredentials {
         for cookie in cookies {
             match cookie.as_str().split_once('=').unwrap() {
                 ("sessionid", v) => session_id = Some(v.to_string()),
-                ("steamLoginSecure", v) => login_token = Some(v.to_string()),
+                ("steamLoginSecure", v) => login_token = Some(maybe_url_encode(v.to_string())),
                 _ => (),
             };
         }
