@@ -66,7 +66,7 @@ async fn handle_request(h: &Handler, req: Request<Body>) -> Result<Response<Body
                 Route::Upload => handle_upload(h, req).await.map_err(HandlerError::SaveItems),
             }
             .unwrap_or_else(|e| {
-                eprintln!("error serving request: {:?}", e);
+                eprintln!("error serving request: {}", e);
                 resp_500()
             });
 

@@ -1,6 +1,7 @@
 use casino::steam::errors::AuthenticationCheckError;
 use chrono::{NaiveDate, TimeZone, Utc};
 use clap::{App, Arg};
+use std::fmt::{self, Display};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -112,7 +113,7 @@ async fn prepare_client(steam_username: &str) -> Result<SteamClient, ClientPrepa
         let creds = match prompt_for_credentials().await {
             Ok(creds) => creds,
             Err(CredentialPromptError::CredentialParse(e)) => {
-                eprintln!("error parsing cookie: {:?}", e);
+                eprintln!("error parsing cookie: {}", e);
                 continue;
             }
             Err(CredentialPromptError::IO(e)) => return Err(e.into()),
@@ -126,7 +127,7 @@ async fn prepare_client(steam_username: &str) -> Result<SteamClient, ClientPrepa
 
         eprintln!("authentication successful");
         if let Err(e) = save_credentials_to_file(&CREDS_PATH, &creds).await {
-            eprintln!("error saving credentials to file: {:?}", e);
+            eprintln!("error saving credentials to file: {}", e);
             eprintln!("continuing without saving, you will need to enter these again next time");
         }
 
@@ -152,6 +153,17 @@ impl From<io::Error> for CredentialPromptError {
     }
 }
 
+impl Display for CredentialPromptError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CredentialPromptError::CredentialParse(e) => {
+                write!(f, "error parsing credentials: {}", e)
+            }
+            CredentialPromptError::IO(e) => write!(f, "io error: {}", e),
+        }
+    }
+}
+
 async fn prompt_for_credentials() -> Result<SteamCredentials, CredentialPromptError> {
     let mut stdin = BufReader::new(io::stdin());
     let mut stdout = io::stdout();
@@ -172,6 +184,15 @@ async fn prompt_for_credentials() -> Result<SteamCredentials, CredentialPromptEr
 enum CredentialLoadSaveError {
     Parse(serde_json::Error),
     IO(io::Error),
+}
+
+impl Display for CredentialLoadSaveError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CredentialLoadSaveError::Parse(e) => write!(f, "error parsing json: {}", e),
+            CredentialLoadSaveError::IO(e) => write!(f, "io error: {}", e),
+        }
+    }
 }
 
 impl From<io::Error> for CredentialLoadSaveError {

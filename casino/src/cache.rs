@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::{self, Display};
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -41,6 +42,16 @@ impl From<RunError<RedisError>> for Error {
 impl From<serde_json::Error> for Error {
     fn from(e: serde_json::Error) -> Self {
         Self::Serde(e)
+    }
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Redis(e) => write!(f, "redis error: {}", e),
+            Self::Serde(e) => write!(f, "ser/deserialisation error: {}", e),
+            Self::ConnectionTimeout => write!(f, "could not acquire a connection in time"),
+        }
     }
 }
 

@@ -265,13 +265,13 @@ impl CsgoFloatClient {
         match self.cache.get(url).await {
             Ok(Some(entry)) => return Ok(entry),
             Ok(None) => (),
-            Err(e) => eprintln!("error fetching from cache: {:?}", e),
+            Err(e) => eprintln!("error fetching from cache: {}", e),
         };
 
         let res = get_by_market_url(&self.client, &self.key, url).await?;
 
         if let Err(e) = self.cache.set(url, &res).await {
-            eprintln!("failed to set cache entry: {:?}", e);
+            eprintln!("failed to set cache entry: {}", e);
         }
 
         Ok(res)
@@ -282,7 +282,7 @@ impl CsgoFloatClient {
         urls: &[&str],
     ) -> Result<HashMap<String, ItemDescription>, CsgoFloatFetchError> {
         let res = self.cache.get_bulk(urls).await.unwrap_or_else(|e| {
-            eprintln!("failed to get items from cache: {:?}", e);
+            eprintln!("failed to get items from cache: {}", e);
             HashMap::with_capacity(0)
         });
         let missing: Vec<&str> = urls
@@ -302,7 +302,7 @@ impl CsgoFloatClient {
         }
 
         if let Err(e) = self.cache.set_bulk(&fresh).await {
-            eprintln!("failed to set items in cache: {:?}", e);
+            eprintln!("failed to set items in cache: {}", e);
         }
 
         let res = fresh.into_iter().fold(res, |mut acc, (k, v)| {

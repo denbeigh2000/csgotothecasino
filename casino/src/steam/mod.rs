@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::{self, Display};
 use std::sync::Arc;
 
 use crate::cache::Cache;
@@ -60,6 +61,20 @@ pub struct Unlock {
 pub enum CredentialParseError {
     NoSessionId,
     DoesNotResembleCookie,
+}
+
+impl Display for CredentialParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CredentialParseError::NoSessionId => {
+                writeln!(f, "could not parse session id.")?;
+                write!(f, "ensure you are passing a `sessionid` parameter")
+            }
+            CredentialParseError::DoesNotResembleCookie => {
+                write!(f, "given string does not resemble a cookie")
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -462,13 +477,13 @@ impl MarketPriceClient {
         match self.cache.get(market_name).await {
             Ok(Some(price)) => return Ok(price),
             Ok(None) => (),
-            Err(e) => eprintln!("failed to read entry from cache: {:?}", e),
+            Err(e) => eprintln!("failed to read entry from cache: {}", e),
         };
 
         let price = get_market_price(&self.client, market_name).await?;
 
         if let Err(e) = self.cache.set(market_name, &price).await {
-            eprintln!("error updating market cache: {:?}", e);
+            eprintln!("error updating market cache: {}", e);
         }
 
         Ok(price)

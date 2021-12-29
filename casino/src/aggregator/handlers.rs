@@ -17,7 +17,6 @@ use super::http::{resp_400, resp_403};
 use super::keystore::KeyStore;
 use super::websocket::{handle_emit, handle_recv};
 
-// TODO: Should this be broken up per-operation?
 #[derive(Debug)]
 pub enum HandlerError {
     GetState(GetStateError),
@@ -25,48 +24,15 @@ pub enum HandlerError {
     StreamItems(StreamError),
 }
 
-// impl Display for HandlerError {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         match self {
-//             Self::BadKey => write!(f, "missing/invalid pre-shared key"),
-//             Self::Transport(e) => write!(f, "http error: {}", e),
-//             Self::Store(e) => write!(f, "error using store: {}", e),
-//             Self::MarketPrice(e) => write!(f, "error fetching market prices: {}", e),
-//             Self::CsgoFloat(e) => write!(f, "error fetching data from csgofloat: {}", e),
-//             Self::Serde(e) => write!(f, "error serialising/deserialising: {}", e),
-//         }
-//     }
-// }
-
-// impl From<StoreError> for HandlerError {
-//     fn from(e: StoreError) -> Self {
-//         Self::Store(e)
-//     }
-// }
-//
-// impl From<MarketPriceFetchError> for HandlerError {
-//     fn from(e: MarketPriceFetchError) -> Self {
-//         Self::MarketPrice(e)
-//     }
-// }
-//
-// impl From<CsgoFloatFetchError> for HandlerError {
-//     fn from(e: CsgoFloatFetchError) -> Self {
-//         Self::CsgoFloat(e)
-//     }
-// }
-//
-// impl From<serde_json::Error> for HandlerError {
-//     fn from(e: serde_json::Error) -> Self {
-//         Self::Serde(e)
-//     }
-// }
-//
-// impl From<hyper::Error> for HandlerError {
-//     fn from(e: hyper::Error) -> Self {
-//         Self::Transport(e)
-//     }
-// }
+impl Display for HandlerError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            HandlerError::GetState(e) => write!(f, "error serving get_state request: {}", e),
+            HandlerError::SaveItems(e) => write!(f, "error serving save request: {}", e),
+            HandlerError::StreamItems(e) => write!(f, "error serving stream request: {}", e),
+        }
+    }
+}
 
 #[derive(Debug)]
 pub enum HydrationError {
@@ -78,6 +44,16 @@ pub enum HydrationError {
 impl From<CsgoFloatFetchError> for HydrationError {
     fn from(e: CsgoFloatFetchError) -> Self {
         Self::FloatInfo(e)
+    }
+}
+
+impl Display for HydrationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::CasePrice(e) => write!(f, "error fetching case price: {}", e),
+            Self::ItemPrice(e) => write!(f, "error fetching item price: {}", e),
+            Self::FloatInfo(e) => write!(f, "error fetching float information: {}", e),
+        }
     }
 }
 
@@ -106,6 +82,19 @@ impl From<HydrationError> for SaveItemsError {
 impl From<CsgoFloatFetchError> for SaveItemsError {
     fn from(e: CsgoFloatFetchError) -> Self {
         SaveItemsError::HydratingItem(HydrationError::FloatInfo(e))
+    }
+}
+
+impl Display for SaveItemsError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::BadKey => write!(f, "bad/missing pre-shared key"),
+            Self::PassingMultipleUsers => write!(f, "data received for all users must be the same"),
+            Self::HydratingItem(e) => write!(f, "error hydrating case item: {}", e),
+            Self::SavingItem(e) => write!(f, "error persisting item: {}", e),
+            Self::PublishingItem(e) => write!(f, "error publishing new item event: {}", e),
+            Self::Transport(e) => write!(f, "error communicating with client: {}", e),
+        }
     }
 }
 
@@ -140,12 +129,28 @@ impl From<CsgoFloatFetchError> for GetStateError {
     }
 }
 
+impl Display for GetStateError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            GetStateError::HydratingItem(e) => write!(f, "error hydrating items: {}", e),
+            GetStateError::FetchingItems(e) => write!(f, "error getting items from store: {}", e),
+            GetStateError::SerializingItems(e) => write!(f, "error serialising items: {}", e),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct StreamError(StoreError);
 
 impl From<StoreError> for StreamError {
     fn from(e: StoreError) -> Self {
         StreamError(e)
+    }
+}
+
+impl Display for StreamError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "error getting data stream: {}", self.0)
     }
 }
 
@@ -312,7 +317,7 @@ pub async fn handle_upload(
     let status = match h.save(key, &unlock).await {
         Ok(_) => StatusCode::OK,
         Err(e) => {
-            eprintln!("saving failed: {:?}", e);
+            eprintln!("saving failed: {}", e);
             match e {
                 SaveItemsError::BadKey | SaveItemsError::PassingMultipleUsers => {
                     StatusCode::UNAUTHORIZED
@@ -341,7 +346,7 @@ pub async fn handle_websocket(
     let stream = match h.event_stream().await {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("error opening event stream: {:?}", e);
+            eprintln!("error opening event stream: {}", e);
             return Ok(resp_500());
         }
     };
