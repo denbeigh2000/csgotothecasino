@@ -12,9 +12,12 @@ RUN cargo build --bin aggregator
 
 FROM debian:buster-slim
 
-RUN apt-get update && apt-get install -y pkg-config libssl-dev
+RUN apt-get update && apt-get install -y pkg-config libssl-dev ca-certificates
 
 COPY --from=base /usr/src/casino/target/debug/aggregator /usr/local/bin/aggregator
+
+RUN mkdir -p /usr/src/casino
+WORKDIR /usr/src/casino
 
 EXPOSE 7000
 
