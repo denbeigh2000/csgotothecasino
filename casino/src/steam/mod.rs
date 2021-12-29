@@ -197,6 +197,17 @@ impl From<UserIdParseError> for ClientCreateError {
     }
 }
 
+impl Display for ClientCreateError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Transport(e) => write!(f, "http error: {}", e),
+            Self::NotLoggedIn => write!(f, "not logged in"),
+            Self::AuthenticationParsing(e) => write!(f, "error parsing steam auth data: {}", e),
+            Self::UserIdParsing(e) => write!(f, "error parsing user id from steam: {}", e),
+        }
+    }
+}
+
 pub struct SteamClient {
     username: String,
     user_id: u64,

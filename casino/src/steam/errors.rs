@@ -65,6 +65,17 @@ impl From<PrepareItemsError> for FetchItemsError {
     }
 }
 
+impl Display for FetchItemsError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::FetchUnpreparedItems(e) => write!(f, "error fetching raw items: {}", e),
+            Self::PreparingItems(e) => {
+                write!(f, "error preparing items from inventory data: {}", e)
+            }
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum PrepareItemsError {
     Transport(reqwest::Error),
@@ -80,6 +91,15 @@ impl From<reqwest::Error> for PrepareItemsError {
 impl From<serde_json::Error> for PrepareItemsError {
     fn from(e: serde_json::Error) -> Self {
         Self::Deserializing(e)
+    }
+}
+
+impl Display for PrepareItemsError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Transport(e) => write!(f, "http error fetching inventory: {}", e),
+            Self::Deserializing(e) => write!(f, "error deserialising inventory: {}", e),
+        }
     }
 }
 
@@ -114,6 +134,15 @@ impl From<serde_json::Error> for MarketPriceFetchError {
 pub enum AuthenticationCheckError {
     Transport(reqwest::Error),
     Parse(AuthenticationParseError),
+}
+
+impl Display for AuthenticationCheckError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Transport(e) => write!(f, "http error: {}", e),
+            Self::Parse(e) => write!(f, "error parsing authentication data: {}", e),
+        }
+    }
 }
 
 impl From<reqwest::Error> for AuthenticationCheckError {

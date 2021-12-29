@@ -162,6 +162,16 @@ impl From<ParseIntError> for UserIdParseError {
     }
 }
 
+impl Display for UserIdParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::MissingUserIdElement => write!(f, "could not find user id element"),
+            Self::BadUserId(e) => write!(f, "error parsing user id: {}", e),
+            Self::UserIdElementParseError => write!(f, "error parsing steam user id"),
+        }
+    }
+}
+
 pub fn get_userid(page: &Html) -> Result<u64, UserIdParseError> {
     let user_id_element = page
         .select(&USER_ID_SELECTOR)

@@ -1,4 +1,5 @@
-use std::convert::Infallible;
+use std::fmt;
+use std::fmt::Display;
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
@@ -6,6 +7,7 @@ use hyper::header::AUTHORIZATION;
 use reqwest::{Client, Url};
 use tokio::time::interval;
 
+use crate::steam::errors::FetchItemsError;
 use crate::steam::{SteamClient, UnhydratedUnlock};
 
 lazy_static::lazy_static! {
@@ -30,9 +32,9 @@ impl Collector {
         pre_shared_key: String,
         poll_interval: Duration,
         start_time: Option<DateTime<Utc>>,
-    ) -> Result<Self, Infallible> {
+    ) -> Self {
         let http_client = Client::new();
-        Ok(Self {
+        Self {
             http_client,
             steam_client,
             pre_shared_key,
@@ -40,10 +42,10 @@ impl Collector {
             poll_interval,
             last_unboxing: start_time,
             last_parsed_history_id: None,
-        })
+        }
     }
 
-    pub async fn run(&mut self) -> Result<(), Infallible> {
+    pub async fn run(&mut self) -> Result<(), CollectorError> {
         let mut tick = interval(self.poll_interval);
 
         loop {
@@ -54,7 +56,7 @@ impl Collector {
         }
     }
 
-    async fn poll(&mut self) -> Result<(), Infallible> {
+    async fn poll(&mut self) -> Result<(), CollectorError> {
         let since = self.last_unboxing.as_ref();
         let last_id = self.last_parsed_history_id.as_deref();
         let mut new_items = self
@@ -75,19 +77,71 @@ impl Collector {
         Ok(())
     }
 
-    async fn send_results(&self, items: &[UnhydratedUnlock]) -> Result<(), Infallible> {
-        let data = serde_json::to_vec(items).unwrap();
+    async fn send_results(&self, items: &[UnhydratedUnlock]) -> Result<(), ResultsSendError> {
+        let data = serde_json::to_vec(items)?;
         let url = COLLECTION_URL.clone();
         self.http_client
             .post(url)
             .body(data)
             .header(AUTHORIZATION, &self.pre_shared_key)
             .send()
-            .await
-            .unwrap()
-            .error_for_status()
-            .unwrap();
+            .await?
+            .error_for_status()?;
 
         Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub enum CollectorError {
+    FetchingItems(FetchItemsError),
+    SendingResults(ResultsSendError),
+}
+
+impl From<FetchItemsError> for CollectorError {
+    fn from(e: FetchItemsError) -> Self {
+        Self::FetchingItems(e)
+    }
+}
+
+impl From<ResultsSendError> for CollectorError {
+    fn from(e: ResultsSendError) -> Self {
+        Self::SendingResults(e)
+    }
+}
+
+impl Display for CollectorError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::FetchingItems(e) => write!(f, "error fetching items: {}", e),
+            Self::SendingResults(e) => write!(f, "error sending results: {}", e),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum ResultsSendError {
+    Serde(serde_json::Error),
+    Transport(reqwest::Error),
+}
+
+impl From<serde_json::Error> for ResultsSendError {
+    fn from(e: serde_json::Error) -> Self {
+        Self::Serde(e)
+    }
+}
+
+impl From<reqwest::Error> for ResultsSendError {
+    fn from(e: reqwest::Error) -> Self {
+        Self::Transport(e)
+    }
+}
+
+impl Display for ResultsSendError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ResultsSendError::Serde(e) => write!(f, "error serialising outbound items: {}", e),
+            ResultsSendError::Transport(e) => write!(f, "http error: {}", e),
+        }
     }
 }

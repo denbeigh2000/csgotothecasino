@@ -2,14 +2,15 @@ use casino::steam::errors::AuthenticationCheckError;
 use chrono::{NaiveDate, TimeZone, Utc};
 use clap::{App, Arg};
 use std::fmt::{self, Display};
+use std::num::ParseIntError;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use tokio::fs;
 use tokio::io::{self, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 
-use casino::collector::config::Config;
-use casino::collector::Collector;
+use casino::collector::config::{Config, ConfigLoadError};
+use casino::collector::{Collector, CollectorError};
 use casino::steam::{ClientCreateError, CredentialParseError, SteamClient, SteamCredentials};
 
 lazy_static::lazy_static! {
@@ -18,6 +19,13 @@ lazy_static::lazy_static! {
 
 #[tokio::main]
 async fn main() {
+    if let Err(e) = main_result().await {
+        eprintln!("fatal error: {}", e);
+        std::process::exit(1);
+    }
+}
+
+async fn main_result() -> Result<(), Error> {
     let args = App::new("collector")
         .arg(
             Arg::with_name("interval")
@@ -36,12 +44,16 @@ async fn main() {
         )
         .get_matches();
 
-    let cfg_path = args.value_of("config").unwrap();
-    let cfg = Config::try_from_path(cfg_path).await.unwrap();
+    let cfg_path = args.value_of("config").ok_or(Error::NoConfigValue)?;
+    let cfg = Config::try_from_path(cfg_path).await?;
 
-    let client = prepare_client(&cfg.steam_username).await.unwrap();
+    let client = prepare_client(&cfg.steam_username).await?;
 
-    let interval_secs = args.value_of("interval").unwrap().parse().unwrap();
+    let interval_secs = args
+        .value_of("interval")
+        .ok_or(Error::NoIntervalValue)?
+        .parse()
+        .map_err(Error::InvalidIntervalValue)?;
     let interval = Duration::from_secs(interval_secs);
 
     let naive_start_time = NaiveDate::from_ymd(2021, 11, 21).and_hms(0, 0, 0);
@@ -50,10 +62,51 @@ async fn main() {
 
     Collector::new(client, cfg.pre_shared_key, interval, st)
         .await
-        .unwrap()
         .run()
-        .await
-        .unwrap();
+        .await?;
+
+    Ok(())
+}
+
+#[derive(Debug)]
+enum Error {
+    LoadingConfig(ConfigLoadError),
+    PreparingClient(ClientPrepareError),
+    NoConfigValue,
+    NoIntervalValue,
+    InvalidIntervalValue(ParseIntError),
+    RunningCollector(CollectorError),
+}
+
+impl From<ConfigLoadError> for Error {
+    fn from(e: ConfigLoadError) -> Self {
+        Self::LoadingConfig(e)
+    }
+}
+
+impl From<ClientPrepareError> for Error {
+    fn from(e: ClientPrepareError) -> Self {
+        Self::PreparingClient(e)
+    }
+}
+
+impl From<CollectorError> for Error {
+    fn from(e: CollectorError) -> Self {
+        Self::RunningCollector(e)
+    }
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::LoadingConfig(e) => write!(f, "error loading config: {}", e),
+            Self::PreparingClient(e) => write!(f, "error : {}", e),
+            Self::NoConfigValue => write!(f, "no value found for config path"),
+            Self::NoIntervalValue => write!(f, "no value found for interval"),
+            Self::InvalidIntervalValue(e) => write!(f, "error parsing polling interval: {}", e),
+            Self::RunningCollector(e) => write!(f, "error running main loop: {}", e),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -85,6 +138,17 @@ impl From<AuthenticationCheckError> for ClientPrepareError {
 impl From<ClientCreateError> for ClientPrepareError {
     fn from(e: ClientCreateError) -> Self {
         ClientPrepareError::ClientCreate(e)
+    }
+}
+
+impl Display for ClientPrepareError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::IO(e) => write!(f, "io error: {}", e),
+            Self::Prompt(e) => write!(f, "error prompting for secrets: {}", e),
+            Self::AuthCheck(e) => write!(f, "error checking for authentication: {}", e),
+            Self::ClientCreate(e) => write!(f, "error creating client: {}", e),
+        }
     }
 }
 
