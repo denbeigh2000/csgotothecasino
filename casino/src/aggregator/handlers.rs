@@ -11,7 +11,7 @@ use crate::aggregator::websocket::MessageSendError;
 use crate::csgofloat::{CsgoFloatClient, CsgoFloatFetchError};
 use crate::steam::errors::MarketPriceFetchError;
 use crate::steam::{MarketPriceClient, UnhydratedUnlock, Unlock};
-use crate::store::{Store, StoreError};
+use crate::store::{Error as StoreError, Store};
 
 use super::http::{resp_400, resp_403};
 use super::keystore::KeyStore;

@@ -6,36 +6,36 @@ use super::parsing::{AuthenticationParseError, ParseFailure};
 
 #[derive(Debug)]
 pub enum FetchNewUnpreparedItemsError {
-    TransportError(reqwest::Error),
-    AuthenticationFailure,
+    Transport(reqwest::Error),
+    Authentication,
     UnhandledStatusCode(StatusCode),
     NoHistoryFound,
-    PageParseError(ParseFailure),
-    AuthenticationParseError(AuthenticationParseError),
+    PageParse(ParseFailure),
+    AuthenticationParse(AuthenticationParseError),
     NotAuthenticated,
 }
 
 impl From<ParseFailure> for FetchNewUnpreparedItemsError {
     fn from(e: ParseFailure) -> Self {
-        Self::PageParseError(e)
+        Self::PageParse(e)
     }
 }
 
 impl From<AuthenticationParseError> for FetchNewUnpreparedItemsError {
     fn from(e: AuthenticationParseError) -> Self {
-        Self::AuthenticationParseError(e)
+        Self::AuthenticationParse(e)
     }
 }
 
 impl std::fmt::Display for FetchNewUnpreparedItemsError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::TransportError(e) => write!(f, "HTTP error: {}", e),
-            Self::AuthenticationFailure => write!(f, "Authentication failure"),
+            Self::Transport(e) => write!(f, "HTTP error: {}", e),
+            Self::Authentication => write!(f, "Authentication failure"),
             Self::UnhandledStatusCode(code) => write!(f, "unhandled status code: {}", code),
             Self::NoHistoryFound => write!(f, "failed to parse any history from steam site"),
-            Self::PageParseError(e) => write!(f, "failed to parse inventory history: {}", e),
-            Self::AuthenticationParseError(e) => write!(f, "error finding login state: {}", e),
+            Self::PageParse(e) => write!(f, "failed to parse inventory history: {}", e),
+            Self::AuthenticationParse(e) => write!(f, "error finding login state: {}", e),
             Self::NotAuthenticated => write!(f, "not logged in"),
         }
     }
@@ -43,7 +43,7 @@ impl std::fmt::Display for FetchNewUnpreparedItemsError {
 
 impl From<reqwest::Error> for FetchNewUnpreparedItemsError {
     fn from(e: reqwest::Error) -> Self {
-        Self::TransportError(e)
+        Self::Transport(e)
     }
 }
 

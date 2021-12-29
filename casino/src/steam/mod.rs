@@ -281,7 +281,7 @@ impl SteamClient {
         match resp.status() {
             StatusCode::OK => (),
             StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
-                return Err(FetchNewUnpreparedItemsError::AuthenticationFailure)
+                return Err(FetchNewUnpreparedItemsError::Authentication)
             }
             status => return Err(FetchNewUnpreparedItemsError::UnhandledStatusCode(status)),
         }

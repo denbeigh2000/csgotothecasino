@@ -5,12 +5,14 @@ use std::{
 
 use bb8_redis::bb8::{Pool, PooledConnection, RunError};
 pub use bb8_redis::redis::aio::Connection;
+pub use bb8_redis::redis::{self, IntoConnectionInfo, RedisError, RedisResult};
 use bb8_redis::redis::{from_redis_value, AsyncCommands, Client, FromRedisValue, ToRedisArgs};
-pub use bb8_redis::redis::{IntoConnectionInfo, RedisError};
 use bb8_redis::RedisConnectionManager;
 use futures_util::{Stream, StreamExt};
 
 use crate::steam::{UnhydratedUnlock, Unlock};
+
+type Result<T> = std::result::Result<T, Error>;
 
 const EVENT_KEY: &str = "new_events";
 
@@ -29,7 +31,7 @@ impl Clone for Store {
 }
 
 impl FromRedisValue for UnhydratedUnlock {
-    fn from_redis_value(v: &bb8_redis::redis::Value) -> bb8_redis::redis::RedisResult<Self> {
+    fn from_redis_value(v: &redis::Value) -> RedisResult<Self> {
         let data: Vec<u8> = from_redis_value(v)?;
         Ok(serde_json::from_slice(&data).unwrap())
     }
@@ -38,7 +40,7 @@ impl FromRedisValue for UnhydratedUnlock {
 impl ToRedisArgs for UnhydratedUnlock {
     fn write_redis_args<W>(&self, out: &mut W)
     where
-        W: ?Sized + bb8_redis::redis::RedisWrite,
+        W: ?Sized + redis::RedisWrite,
     {
         let data = serde_json::to_vec(self).unwrap();
         out.write_arg(&data)
@@ -46,7 +48,7 @@ impl ToRedisArgs for UnhydratedUnlock {
 }
 
 impl FromRedisValue for Unlock {
-    fn from_redis_value(v: &bb8_redis::redis::Value) -> bb8_redis::redis::RedisResult<Self> {
+    fn from_redis_value(v: &redis::Value) -> RedisResult<Self> {
         let data: Vec<u8> = from_redis_value(v)?;
         Ok(serde_json::from_slice(&data).unwrap())
     }
@@ -55,7 +57,7 @@ impl FromRedisValue for Unlock {
 impl ToRedisArgs for Unlock {
     fn write_redis_args<W>(&self, out: &mut W)
     where
-        W: ?Sized + bb8_redis::redis::RedisWrite,
+        W: ?Sized + redis::RedisWrite,
     {
         let data = serde_json::to_vec(self).unwrap();
         out.write_arg(&data)
@@ -63,45 +65,45 @@ impl ToRedisArgs for Unlock {
 }
 
 #[derive(Debug)]
-pub enum StoreError {
+pub enum Error {
     ConnectionTimeout,
-    RedisError(RedisError),
-    SerdeError(serde_json::Error),
+    Redis(RedisError),
+    Serde(serde_json::Error),
 }
 
-impl Display for StoreError {
+impl Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::ConnectionTimeout => write!(f, "connection timeout"),
-            Self::RedisError(e) => write!(f, "error interacting with redis: {}", e),
-            Self::SerdeError(e) => write!(f, "error serialising/deserialising: {}", e),
+            Self::Redis(e) => write!(f, "error interacting with redis: {}", e),
+            Self::Serde(e) => write!(f, "error serialising/deserialising: {}", e),
         }
     }
 }
 
-impl From<RunError<RedisError>> for StoreError {
+impl From<RunError<RedisError>> for Error {
     fn from(e: RunError<RedisError>) -> Self {
         match e {
-            RunError::User(e) => Self::RedisError(e),
+            RunError::User(e) => Self::Redis(e),
             RunError::TimedOut => Self::ConnectionTimeout,
         }
     }
 }
 
-impl From<RedisError> for StoreError {
+impl From<RedisError> for Error {
     fn from(e: RedisError) -> Self {
-        Self::RedisError(e)
+        Self::Redis(e)
     }
 }
 
-impl From<serde_json::Error> for StoreError {
+impl From<serde_json::Error> for Error {
     fn from(e: serde_json::Error) -> Self {
-        Self::SerdeError(e)
+        Self::Serde(e)
     }
 }
 
 impl Store {
-    pub async fn new<T: IntoConnectionInfo>(i: T) -> Result<Self, StoreError> {
+    pub async fn new<T: IntoConnectionInfo>(i: T) -> Result<Self> {
         let conn_info = i.into_connection_info()?;
         let mgr = RedisConnectionManager::new(conn_info.clone())?;
         let pool = Arc::new(bb8_redis::bb8::Pool::builder().build(mgr).await?);
@@ -110,20 +112,18 @@ impl Store {
         Ok(Self { client, pool })
     }
 
-    async fn make_conn(&self) -> Result<Connection, RedisError> {
+    async fn make_conn(&self) -> RedisResult<Connection> {
         self.client.get_async_connection().await
     }
 
-    async fn get_conn<'a, 'b>(
-        &'a self,
-    ) -> Result<PooledConnection<'b, RedisConnectionManager>, StoreError>
+    async fn get_conn<'a, 'b>(&'a self) -> Result<PooledConnection<'b, RedisConnectionManager>>
     where
         'a: 'b,
     {
         Ok(self.pool.get().await?)
     }
 
-    pub async fn get_entries(&self) -> Result<Vec<UnhydratedUnlock>, StoreError> {
+    pub async fn get_entries(&self) -> Result<Vec<UnhydratedUnlock>> {
         let mut conn = self.get_conn().await?;
         let keys: Vec<String> = match conn.zrevrange("entries", 0, -1).await? {
             Some(keys) => keys,
@@ -137,13 +137,13 @@ impl Store {
         })
     }
 
-    pub async fn append_entry(&self, entry: &UnhydratedUnlock) -> Result<(), StoreError> {
+    pub async fn append_entry(&self, entry: &UnhydratedUnlock) -> Result<()> {
         let mut conn = self.get_conn().await?;
         let ts = entry.at.timestamp_millis();
         let id = &entry.history_id;
         let data_key = format!("unlock_{}", id);
         let data = serde_json::to_vec(&entry)?;
-        let _res: () = bb8_redis::redis::pipe()
+        let _res: () = redis::pipe()
             .cmd("ZADD")
             .arg("entries")
             .arg(ts)
@@ -157,14 +157,14 @@ impl Store {
         Ok(())
     }
 
-    pub async fn publish(&self, entry: &Unlock) -> Result<(), StoreError> {
+    pub async fn publish(&self, entry: &Unlock) -> Result<()> {
         let mut conn = self.get_conn().await?;
         let _res: () = conn.publish(&EVENT_KEY, entry).await?;
 
         Ok(())
     }
 
-    pub async fn get_event_stream(&self) -> Result<impl Stream<Item = Unlock>, StoreError> {
+    pub async fn get_event_stream(&self) -> Result<impl Stream<Item = Unlock>> {
         let mut conn = self.make_conn().await?.into_pubsub();
         conn.subscribe(EVENT_KEY).await?;
 

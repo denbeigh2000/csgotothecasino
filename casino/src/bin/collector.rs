@@ -92,8 +92,8 @@ async fn prepare_client(steam_username: &str) -> Result<SteamClient, ClientPrepa
         let path = CREDS_PATH.as_path();
         let creds = match load_credentials_from_file(path).await {
             Ok(creds) => Some(creds),
-            Err(CredentialLoadSaveError::IOError(e)) => return Err(e.into()),
-            Err(CredentialLoadSaveError::ParseError(e)) => {
+            Err(CredentialLoadSaveError::IO(e)) => return Err(e.into()),
+            Err(CredentialLoadSaveError::Parse(e)) => {
                 eprintln!("error parsing credentials: {}", e);
                 fs::remove_file(path).await?;
                 None
@@ -109,7 +109,15 @@ async fn prepare_client(steam_username: &str) -> Result<SteamClient, ClientPrepa
     }
 
     loop {
-        let creds = prompt_for_credentials().await?;
+        let creds = match prompt_for_credentials().await {
+            Ok(creds) => creds,
+            Err(CredentialPromptError::CredentialParse(e)) => {
+                eprintln!("error parsing cookie: {:?}", e);
+                continue;
+            }
+            Err(CredentialPromptError::IO(e)) => return Err(e.into()),
+        };
+
         let client = SteamClient::new(steam_username.to_string(), creds.clone()).await?;
         if !client.is_authenticated().await? {
             eprintln!("authentication unsuccessful");
@@ -128,19 +136,19 @@ async fn prepare_client(steam_username: &str) -> Result<SteamClient, ClientPrepa
 
 #[derive(Debug)]
 enum CredentialPromptError {
-    CredentialParseError(CredentialParseError),
-    IOError(io::Error),
+    CredentialParse(CredentialParseError),
+    IO(io::Error),
 }
 
 impl From<CredentialParseError> for CredentialPromptError {
     fn from(e: CredentialParseError) -> Self {
-        Self::CredentialParseError(e)
+        Self::CredentialParse(e)
     }
 }
 
 impl From<io::Error> for CredentialPromptError {
     fn from(e: io::Error) -> Self {
-        Self::IOError(e)
+        Self::IO(e)
     }
 }
 
@@ -162,19 +170,19 @@ async fn prompt_for_credentials() -> Result<SteamCredentials, CredentialPromptEr
 
 #[derive(Debug)]
 enum CredentialLoadSaveError {
-    ParseError(serde_json::Error),
-    IOError(io::Error),
+    Parse(serde_json::Error),
+    IO(io::Error),
 }
 
 impl From<io::Error> for CredentialLoadSaveError {
     fn from(e: io::Error) -> Self {
-        Self::IOError(e)
+        Self::IO(e)
     }
 }
 
 impl From<serde_json::Error> for CredentialLoadSaveError {
     fn from(e: serde_json::Error) -> Self {
-        Self::ParseError(e)
+        Self::Parse(e)
     }
 }
 

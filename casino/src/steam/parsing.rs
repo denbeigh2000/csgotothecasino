@@ -98,7 +98,7 @@ pub enum ParseFailure {
     MissingGainedItem,
     MissingTradeId,
     TradeIdFormattingChanged,
-    TrivialItemParseError(TrivialItemParseError),
+    TrivialItemParsing(TrivialItemParseError),
 }
 
 impl Display for ParseFailure {
@@ -116,14 +116,14 @@ impl Display for ParseFailure {
             Self::MissingGainedItem => write!(f, "could not find item gained from unboxing"),
             Self::MissingTradeId => write!(f, "could not find id associated with trade"),
             Self::TradeIdFormattingChanged => write!(f, "could not parse trade id from element"),
-            Self::TrivialItemParseError(e) => write!(f, "could not parse trivial item: {}", e),
+            Self::TrivialItemParsing(e) => write!(f, "could not parse trivial item: {}", e),
         }
     }
 }
 
 impl From<TrivialItemParseError> for ParseFailure {
     fn from(e: TrivialItemParseError) -> Self {
-        Self::TrivialItemParseError(e)
+        Self::TrivialItemParsing(e)
     }
 }
 

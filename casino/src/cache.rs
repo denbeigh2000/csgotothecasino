@@ -8,6 +8,8 @@ use bb8_redis::RedisConnectionManager;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
+type Result<T> = std::result::Result<T, Error>;
+
 pub struct Cache<T: DeserializeOwned> {
     pool: Arc<Pool<RedisConnectionManager>>,
     key: String,
@@ -15,30 +17,30 @@ pub struct Cache<T: DeserializeOwned> {
 }
 
 #[derive(Debug)]
-pub enum CacheError {
-    RedisError(RedisError),
-    SerdeError(serde_json::Error),
+pub enum Error {
+    Redis(RedisError),
+    Serde(serde_json::Error),
     ConnectionTimeout,
 }
 
-impl From<RedisError> for CacheError {
+impl From<RedisError> for Error {
     fn from(e: RedisError) -> Self {
-        Self::RedisError(e)
+        Self::Redis(e)
     }
 }
 
-impl From<RunError<RedisError>> for CacheError {
+impl From<RunError<RedisError>> for Error {
     fn from(e: RunError<RedisError>) -> Self {
         match e {
-            RunError::User(e) => Self::RedisError(e),
+            RunError::User(e) => Self::Redis(e),
             RunError::TimedOut => Self::ConnectionTimeout,
         }
     }
 }
 
-impl From<serde_json::Error> for CacheError {
+impl From<serde_json::Error> for Error {
     fn from(e: serde_json::Error) -> Self {
-        Self::SerdeError(e)
+        Self::Serde(e)
     }
 }
 
@@ -48,9 +50,7 @@ impl<T: DeserializeOwned + Serialize> Cache<T> {
         Self { pool, key, _data }
     }
 
-    async fn get_conn<'a, 'b>(
-        &'a self,
-    ) -> Result<PooledConnection<'b, RedisConnectionManager>, CacheError>
+    async fn get_conn<'a, 'b>(&'a self) -> Result<PooledConnection<'b, RedisConnectionManager>>
     where
         'a: 'b,
     {
@@ -61,7 +61,7 @@ impl<T: DeserializeOwned + Serialize> Cache<T> {
         format!("{}_{}", self.key, given)
     }
 
-    pub async fn get(&self, key: &str) -> Result<Option<T>, CacheError> {
+    pub async fn get(&self, key: &str) -> Result<Option<T>> {
         let redis_key = self.format_key(key);
         let mut conn = self.get_conn().await?;
 
@@ -71,7 +71,7 @@ impl<T: DeserializeOwned + Serialize> Cache<T> {
         Ok(decoded)
     }
 
-    pub async fn get_bulk(&self, keys: &[&str]) -> Result<HashMap<String, T>, CacheError> {
+    pub async fn get_bulk(&self, keys: &[&str]) -> Result<HashMap<String, T>> {
         // NOTE: We defer to the singular variety here if we have a single item
         // to retreieve, because redis-rs' internal implementation can't
         // distinguish between a single item and a single-len vec, meaning it
@@ -109,7 +109,7 @@ impl<T: DeserializeOwned + Serialize> Cache<T> {
         Ok(results)
     }
 
-    pub async fn set(&self, key: &str, data: &T) -> Result<(), CacheError> {
+    pub async fn set(&self, key: &str, data: &T) -> Result<()> {
         let redis_key = self.format_key(key);
         let serialised = serde_json::to_vec(data)?;
 
@@ -120,7 +120,7 @@ impl<T: DeserializeOwned + Serialize> Cache<T> {
         Ok(())
     }
 
-    pub async fn set_bulk(&self, entries: &HashMap<String, T>) -> Result<(), CacheError> {
+    pub async fn set_bulk(&self, entries: &HashMap<String, T>) -> Result<()> {
         let serialised: Vec<(String, Vec<u8>)> = entries
             .iter()
             .map(|(k, v)| {
@@ -129,7 +129,7 @@ impl<T: DeserializeOwned + Serialize> Cache<T> {
 
                 Ok((key, data))
             })
-            .collect::<Result<_, serde_json::Error>>()?;
+            .collect::<std::result::Result<_, serde_json::Error>>()?;
 
         let mut conn = self.get_conn().await?;
         let _: () = conn.set_multiple(&serialised).await?;
