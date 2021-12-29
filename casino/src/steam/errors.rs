@@ -109,3 +109,21 @@ impl From<serde_json::Error> for MarketPriceFetchError {
         Self::Deserializing(e)
     }
 }
+
+#[derive(Debug)]
+pub enum AuthenticationCheckError {
+    Transport(reqwest::Error),
+    Parse(AuthenticationParseError),
+}
+
+impl From<reqwest::Error> for AuthenticationCheckError {
+    fn from(e: reqwest::Error) -> Self {
+        Self::Transport(e)
+    }
+}
+
+impl From<AuthenticationParseError> for AuthenticationCheckError {
+    fn from(e: AuthenticationParseError) -> Self {
+        Self::Parse(e)
+    }
+}

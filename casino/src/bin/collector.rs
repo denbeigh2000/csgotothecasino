@@ -1,3 +1,4 @@
+use casino::steam::errors::AuthenticationCheckError;
 use chrono::{NaiveDate, TimeZone, Utc};
 use clap::{App, Arg};
 use std::path::{Path, PathBuf};
@@ -8,7 +9,7 @@ use tokio::io::{self, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 
 use casino::collector::config::Config;
 use casino::collector::Collector;
-use casino::steam::{CredentialParseError, SteamCredentials};
+use casino::steam::{ClientCreateError, CredentialParseError, SteamClient, SteamCredentials};
 
 lazy_static::lazy_static! {
     static ref CREDS_PATH: PathBuf = PathBuf::from("./.creds.json");
@@ -34,31 +35,95 @@ async fn main() {
         )
         .get_matches();
 
-    let config_path = args.value_of("config").unwrap();
-    let config = Config::try_from_path(config_path).await.unwrap();
+    let cfg_path = args.value_of("config").unwrap();
+    let cfg = Config::try_from_path(cfg_path).await.unwrap();
+
+    let client = prepare_client(&cfg.steam_username).await.unwrap();
 
     let interval_secs = args.value_of("interval").unwrap().parse().unwrap();
     let interval = Duration::from_secs(interval_secs);
 
-    let steam_creds = if CREDS_PATH.exists() {
-        load_credentials_from_file(CREDS_PATH.as_path())
-            .await
-            .unwrap()
-    } else {
-        let creds = prompt_for_credentials().await.unwrap();
-        save_credentials_to_file(&CREDS_PATH, &creds).await.unwrap();
-        creds
-    };
-
     let naive_start_time = NaiveDate::from_ymd(2021, 11, 21).and_hms(0, 0, 0);
     let start_time = Utc.from_local_datetime(&naive_start_time).unwrap();
+    let st = Some(start_time);
 
-    Collector::from_config(config, steam_creds, interval, Some(start_time))
+    Collector::new(client, cfg.pre_shared_key, interval, st)
         .await
         .unwrap()
         .run()
         .await
         .unwrap();
+}
+
+#[derive(Debug)]
+enum ClientPrepareError {
+    IO(io::Error),
+    Prompt(CredentialPromptError),
+    AuthCheck(AuthenticationCheckError),
+    ClientCreate(ClientCreateError),
+}
+
+impl From<io::Error> for ClientPrepareError {
+    fn from(e: io::Error) -> Self {
+        Self::IO(e)
+    }
+}
+
+impl From<CredentialPromptError> for ClientPrepareError {
+    fn from(e: CredentialPromptError) -> Self {
+        Self::Prompt(e)
+    }
+}
+
+impl From<AuthenticationCheckError> for ClientPrepareError {
+    fn from(e: AuthenticationCheckError) -> Self {
+        Self::AuthCheck(e)
+    }
+}
+
+impl From<ClientCreateError> for ClientPrepareError {
+    fn from(e: ClientCreateError) -> Self {
+        ClientPrepareError::ClientCreate(e)
+    }
+}
+
+async fn prepare_client(steam_username: &str) -> Result<SteamClient, ClientPrepareError> {
+    if CREDS_PATH.exists() {
+        let path = CREDS_PATH.as_path();
+        let creds = match load_credentials_from_file(path).await {
+            Ok(creds) => Some(creds),
+            Err(CredentialLoadSaveError::IOError(e)) => return Err(e.into()),
+            Err(CredentialLoadSaveError::ParseError(e)) => {
+                eprintln!("error parsing credentials: {}", e);
+                fs::remove_file(path).await?;
+                None
+            }
+        };
+
+        if let Some(creds) = creds {
+            let client = SteamClient::new(steam_username.to_string(), creds).await?;
+            if client.is_authenticated().await? {
+                return Ok(client);
+            }
+        }
+    }
+
+    loop {
+        let creds = prompt_for_credentials().await?;
+        let client = SteamClient::new(steam_username.to_string(), creds.clone()).await?;
+        if !client.is_authenticated().await? {
+            eprintln!("authentication unsuccessful");
+            continue;
+        }
+
+        eprintln!("authentication successful");
+        if let Err(e) = save_credentials_to_file(&CREDS_PATH, &creds).await {
+            eprintln!("error saving credentials to file: {:?}", e);
+            eprintln!("continuing without saving, you will need to enter these again next time");
+        }
+
+        return Ok(client);
+    }
 }
 
 #[derive(Debug)]

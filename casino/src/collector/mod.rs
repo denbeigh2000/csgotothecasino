@@ -6,9 +6,7 @@ use hyper::header::AUTHORIZATION;
 use reqwest::{Client, Url};
 use tokio::time::interval;
 
-use crate::steam::{SteamClient, SteamCredentials, UnhydratedUnlock};
-
-use self::config::Config;
+use crate::steam::{SteamClient, UnhydratedUnlock};
 
 lazy_static::lazy_static! {
     static ref COLLECTION_URL: Url = "https://casino.denb.ee/api/upload".parse().unwrap();
@@ -28,14 +26,12 @@ pub struct Collector {
 
 impl Collector {
     pub async fn new(
-        steam_username: String,
+        steam_client: SteamClient,
         pre_shared_key: String,
-        creds: SteamCredentials,
         poll_interval: Duration,
         start_time: Option<DateTime<Utc>>,
     ) -> Result<Self, Infallible> {
         let http_client = Client::new();
-        let steam_client = SteamClient::new(steam_username, creds).await.unwrap();
         Ok(Self {
             http_client,
             steam_client,
@@ -45,22 +41,6 @@ impl Collector {
             last_unboxing: start_time,
             last_parsed_history_id: None,
         })
-    }
-
-    pub async fn from_config(
-        cfg: Config,
-        creds: SteamCredentials,
-        poll_interval: Duration,
-        start_time: Option<DateTime<Utc>>,
-    ) -> Result<Self, Infallible> {
-        Self::new(
-            cfg.steam_username,
-            cfg.pre_shared_key,
-            creds,
-            poll_interval,
-            start_time,
-        )
-        .await
     }
 
     pub async fn run(&mut self) -> Result<(), Infallible> {

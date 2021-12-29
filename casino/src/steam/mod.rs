@@ -21,7 +21,7 @@ use scraper::Html;
 use serde::{Deserialize, Serialize};
 use serde_aux::field_attributes::deserialize_number_from_string;
 
-use self::errors::MarketPriceFetchError;
+use self::errors::{AuthenticationCheckError, MarketPriceFetchError};
 use self::parsing::{AuthenticationParseError, UserIdParseError};
 
 pub mod errors;
@@ -62,7 +62,7 @@ pub enum CredentialParseError {
     DoesNotResembleCookie,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SteamCredentials {
     session_id: String,
     // NOTE: Unsure if this is required on accounts without steam guard
@@ -103,8 +103,8 @@ impl SteamCredentials {
         }
     }
 
-    pub fn into_string(self) -> String {
-        match self.login_token {
+    pub fn as_string(&self) -> String {
+        match self.login_token.as_deref() {
             Some(t) => format!("sessionid={}; steamLoginSecure={}", self.session_id, t),
             None => format!("sessionid={}", self.session_id),
         }
@@ -196,7 +196,7 @@ impl SteamClient {
     pub async fn new(username: String, creds: SteamCredentials) -> Result<Self, ClientCreateError> {
         let http_client = Client::builder().build()?;
 
-        let cookie_str = creds.into_string();
+        let cookie_str = creds.as_string();
 
         let profile_url = format!("https://steamcommunity.com/id/{}", username);
         let profile_resp = http_client
@@ -253,6 +253,22 @@ impl SteamClient {
             .await?;
 
         Ok(prepared)
+    }
+
+    pub async fn is_authenticated(&self) -> Result<bool, AuthenticationCheckError> {
+        let data = self
+            .http_client
+            .get(self.inventory_url.as_ref())
+            .header(COOKIE, &self.cookie_str)
+            .send()
+            .await?
+            .text()
+            .await?;
+
+        let parsed = Html::parse_document(&data);
+        let authenticated = is_authenticated(&parsed)?;
+
+        Ok(authenticated)
     }
 
     async fn fetch_new_unprepared_items(
