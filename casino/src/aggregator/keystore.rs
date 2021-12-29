@@ -1,4 +1,6 @@
-use std::{collections::HashMap, path::Path};
+use std::collections::HashMap;
+use std::fmt::{self, Display};
+use std::path::Path;
 
 use serde::Deserialize;
 use tokio::fs::File;
@@ -42,5 +44,14 @@ impl From<io::Error> for KeyStoreLoadSaveError {
 impl From<serde_yaml::Error> for KeyStoreLoadSaveError {
     fn from(e: serde_yaml::Error) -> Self {
         Self::Serde(e)
+    }
+}
+
+impl Display for KeyStoreLoadSaveError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::IO(e) => write!(f, "io error: {}", e),
+            Self::Serde(e) => write!(f, "ser/deserialisation error: {}", e),
+        }
     }
 }

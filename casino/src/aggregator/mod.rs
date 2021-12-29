@@ -1,4 +1,5 @@
 use std::convert::Infallible;
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 use hyper_tungstenite::hyper::server::conn::AddrStream;
@@ -27,7 +28,7 @@ async fn ctrl_c() {
     eprintln!("shutting down");
 }
 
-pub async fn serve(handler: Handler) -> Result<(), Infallible> {
+pub async fn serve(bind_addr: &SocketAddr, handler: Handler) -> Result<(), Infallible> {
     let h = Arc::new(handler);
 
     let svc = make_service_fn(move |_socket: &AddrStream| {
@@ -45,8 +46,7 @@ pub async fn serve(handler: Handler) -> Result<(), Infallible> {
         }
     });
 
-    let addr = "0.0.0.0:7000".parse().unwrap();
-    hyper::Server::bind(&addr)
+    hyper::Server::bind(&bind_addr)
         .serve(svc)
         .with_graceful_shutdown(ctrl_c())
         .await

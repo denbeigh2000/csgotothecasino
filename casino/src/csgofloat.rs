@@ -238,6 +238,21 @@ pub async fn get_bulk_by_market_url(
     Ok(items_by_url)
 }
 
+#[derive(Debug)]
+pub struct CsgoFloatClientCreateError(RedisError);
+
+impl From<RedisError> for CsgoFloatClientCreateError {
+    fn from(e: RedisError) -> Self {
+        Self(e)
+    }
+}
+
+impl Display for CsgoFloatClientCreateError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "error creating csgofloat client cache: {}", self.0)
+    }
+}
+
 pub struct CsgoFloatClient {
     key: String,
     cache: Cache<ItemDescription>,
@@ -248,7 +263,7 @@ impl CsgoFloatClient {
     pub async fn new<S: Into<String>, T: IntoConnectionInfo>(
         key: S,
         i: T,
-    ) -> Result<Self, RedisError> {
+    ) -> Result<Self, CsgoFloatClientCreateError> {
         let conn_info = i.into_connection_info()?;
         let mgr = RedisConnectionManager::new(conn_info.clone())?;
         let pool = Arc::new(Pool::builder().build(mgr).await?);

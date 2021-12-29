@@ -467,14 +467,37 @@ pub async fn get_market_price(
     Ok(parsed.into())
 }
 
+#[derive(Debug)]
+pub enum MarketPriceClientCreateError {
+    InvalidRedisUrl(RedisError),
+    Redis(RedisError),
+}
+
+impl From<RedisError> for MarketPriceClientCreateError {
+    fn from(e: RedisError) -> Self {
+        Self::Redis(e)
+    }
+}
+
+impl Display for MarketPriceClientCreateError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidRedisUrl(e) => write!(f, "invalid redis url given: {}", e),
+            Self::Redis(e) => write!(f, "error communicating with redis: {}", e),
+        }
+    }
+}
+
 pub struct MarketPriceClient {
     client: Client,
     cache: Cache<MarketPrices>,
 }
 
 impl MarketPriceClient {
-    pub async fn new<T: IntoConnectionInfo>(i: T) -> Result<Self, RedisError> {
-        let conn_info = i.into_connection_info()?;
+    pub async fn new<T: IntoConnectionInfo>(i: T) -> Result<Self, MarketPriceClientCreateError> {
+        let conn_info = i
+            .into_connection_info()
+            .map_err(MarketPriceClientCreateError::InvalidRedisUrl)?;
         let mgr = RedisConnectionManager::new(conn_info.clone())?;
         let pool = Arc::new(Pool::builder().build(mgr).await?);
         let client = Client::new();
