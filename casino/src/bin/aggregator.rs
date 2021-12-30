@@ -4,7 +4,6 @@ use std::net::{AddrParseError, SocketAddr};
 use std::{env, fmt};
 
 use bb8_redis::redis::{ConnectionInfo, RedisError};
-
 use casino::aggregator::keystore::{KeyStore, KeyStoreLoadSaveError};
 use casino::aggregator::{serve, Handler};
 use casino::csgofloat::{CsgoFloatClient, CsgoFloatClientCreateError};

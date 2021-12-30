@@ -12,11 +12,9 @@ pub mod keystore;
 mod websocket;
 
 mod handlers;
-pub use crate::aggregator::handlers::Handler;
-use crate::aggregator::handlers::{handle_state, handle_upload, handle_websocket};
-
-use crate::aggregator::handlers::HandlerError;
-use crate::aggregator::http::{resp_404, resp_500, router, Route};
+pub use self::handlers::Handler;
+use self::handlers::{handle_state, handle_upload, handle_websocket, HandlerError};
+use self::http::{resp_404, resp_500, router, Route};
 
 lazy_static::lazy_static! {
     static ref ROUTER: Router<Route> = router();
@@ -46,7 +44,7 @@ pub async fn serve(bind_addr: &SocketAddr, handler: Handler) -> Result<(), Infal
         }
     });
 
-    hyper::Server::bind(&bind_addr)
+    hyper::Server::bind(bind_addr)
         .serve(svc)
         .with_graceful_shutdown(ctrl_c())
         .await

@@ -1,17 +1,16 @@
-use casino::steam::errors::AuthenticationCheckError;
-use chrono::{NaiveDate, TimeZone, Utc};
-use clap::{App, Arg};
 use std::fmt::{self, Display};
 use std::num::ParseIntError;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use tokio::fs;
-use tokio::io::{self, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
-
 use casino::collector::config::{Config, ConfigLoadError};
 use casino::collector::{Collector, CollectorError};
+use casino::steam::errors::AuthenticationCheckError;
 use casino::steam::{ClientCreateError, CredentialParseError, SteamClient, SteamCredentials};
+use chrono::{NaiveDate, TimeZone, Utc};
+use clap::{App, Arg};
+use tokio::fs;
+use tokio::io::{self, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 
 lazy_static::lazy_static! {
     static ref CREDS_PATH: PathBuf = PathBuf::from("./.creds.json");

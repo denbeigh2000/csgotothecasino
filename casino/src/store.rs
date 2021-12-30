@@ -1,7 +1,5 @@
-use std::{
-    fmt::{self, Display},
-    sync::Arc,
-};
+use std::fmt::{self, Display};
+use std::sync::Arc;
 
 use bb8_redis::bb8::{Pool, PooledConnection, RunError};
 pub use bb8_redis::redis::aio::Connection;

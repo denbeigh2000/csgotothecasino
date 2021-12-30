@@ -2,15 +2,6 @@ use std::collections::HashMap;
 use std::fmt::{self, Display};
 use std::sync::Arc;
 
-use crate::cache::Cache;
-pub use crate::csgofloat::ItemDescription;
-use crate::steam::errors::{FetchItemsError, FetchNewUnpreparedItemsError, PrepareItemsError};
-pub use crate::steam::parsing::TrivialItem;
-use crate::steam::parsing::{
-    get_userid, is_authenticated, parse_raw_unlock, InventoryId, ParseSuccess, RawUnlock,
-    TRADE_SELECTOR,
-};
-
 use bb8_redis::bb8::Pool;
 use bb8_redis::redis::{IntoConnectionInfo, RedisError};
 use bb8_redis::RedisConnectionManager;
@@ -23,14 +14,26 @@ use scraper::Html;
 use serde::{Deserialize, Serialize};
 use serde_aux::field_attributes::deserialize_number_from_string;
 
-use self::errors::{AuthenticationCheckError, MarketPriceFetchError};
-use self::parsing::{AuthenticationParseError, UserIdParseError};
+use self::errors::{
+    AuthenticationCheckError, FetchItemsError, FetchNewUnpreparedItemsError, MarketPriceFetchError,
+    PrepareItemsError,
+};
+pub use self::id::{Id, IdUrlParseError};
+use self::parsing::{
+    get_userid, is_authenticated, parse_raw_unlock, AuthenticationParseError, InventoryId,
+    ParseSuccess, RawUnlock, TrivialItem, UserIdParseError, TRADE_SELECTOR,
+};
+use crate::cache::Cache;
+pub use crate::csgofloat::ItemDescription;
 
 pub mod errors;
+mod id;
 mod parsing;
 
 lazy_static::lazy_static! {
     static ref COOKIE_REGEX: Regex = Regex::new(r"[^\s=;]+=[^\s=;]+").unwrap();
+
+    static ref PROFILE_URL_REGEX: Regex = Regex::new(r#"steamcommunity\.com/(?:id/([a-zA-Z0-9-_]+)|profiles/([0-9]+))"#).unwrap();
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
