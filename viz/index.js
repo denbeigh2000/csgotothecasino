@@ -6,10 +6,25 @@ const { createProxyMiddleware } = require("http-proxy-middleware");
 // Create Express Server
 const app = express();
 
+// Use environment
+const ENV = "prod";
+
 // Configuration
 const PORT = 7007;
 const HOST = "localhost";
-const API_SERVICE_URL = "https://casino.denb.ee";
+const ENVS = {
+    prod: {
+        API_SERVICE_URL: "https://casino.denb.ee",
+        WS_SERVICE_URL: "wss://casino.denb.ee",
+        SERVICE_URL_PREFIX: "api/",
+    },
+    dev: {
+        API_SERVICE_URL: "http://127.0.0.1:7000",
+        WS_SERVICE_URL: "ws://127.0.0.1:7000",
+        SERVICE_URL_PREFIX: "",
+    }
+}
+const { API_SERVICE_URL, WS_SERVICE_URL, SERVICE_URL_PREFIX } = ENVS[ENV];
 
 // Logging
 app.use(morgan("dev"));
@@ -20,17 +35,17 @@ const proxy = createProxyMiddleware({
   changeOrigin: true,
 });
 
-const wsProxy = createProxyMiddleware("/api/stream", {
-  target: "wss://casino.denb.ee",
+const wsProxy = createProxyMiddleware(`/${SERVICE_URL_PREFIX}stream`, {
+  target: WS_SERVICE_URL,
   changeOrigin: true,
   logLevel: "debug",
   ws: true,
 });
 
-app.use("/api/stream", wsProxy);
+app.use(`/${SERVICE_URL_PREFIX}stream`, wsProxy);
 
 app.use("/viz", express.static("src"));
-app.use("/api/", proxy);
+app.use(`/${SERVICE_URL_PREFIX}`, proxy);
 
 open(`http://${HOST}:${PORT}/viz/index.html`);
 
