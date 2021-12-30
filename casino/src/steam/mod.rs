@@ -9,19 +9,27 @@ use chrono::{DateTime, Utc};
 use hyper::header::COOKIE;
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use regex::Regex;
-use reqwest::{Client, Request, StatusCode, Url};
+use reqwest::{Client, Request, StatusCode};
 use scraper::Html;
 use serde::{Deserialize, Serialize};
 use serde_aux::field_attributes::deserialize_number_from_string;
 
 use self::errors::{
-    AuthenticationCheckError, FetchItemsError, FetchNewUnpreparedItemsError, MarketPriceFetchError,
+    AuthenticationCheckError,
+    FetchItemsError,
+    FetchNewUnpreparedItemsError,
+    MarketPriceFetchError,
     PrepareItemsError,
 };
 pub use self::id::{Id, IdUrlParseError};
 use self::parsing::{
-    get_userid, is_authenticated, parse_raw_unlock, AuthenticationParseError, InventoryId,
-    ParseSuccess, RawUnlock, TrivialItem, UserIdParseError, TRADE_SELECTOR,
+    is_authenticated,
+    parse_raw_unlock,
+    InventoryId,
+    ParseSuccess,
+    RawUnlock,
+    TrivialItem,
+    TRADE_SELECTOR,
 };
 use crate::cache::Cache;
 pub use crate::csgofloat::ItemDescription;
@@ -32,8 +40,6 @@ mod parsing;
 
 lazy_static::lazy_static! {
     static ref COOKIE_REGEX: Regex = Regex::new(r"[^\s=;]+=[^\s=;]+").unwrap();
-
-    static ref PROFILE_URL_REGEX: Regex = Regex::new(r#"steamcommunity\.com/(?:id/([a-zA-Z0-9-_]+)|profiles/([0-9]+))"#).unwrap();
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -183,98 +189,31 @@ pub struct Action {
     name: String,
 }
 
-#[derive(Debug)]
-pub enum ClientCreateError {
-    Transport(reqwest::Error),
-    NotLoggedIn,
-    AuthenticationParsing(AuthenticationParseError),
-    UserIdParsing(UserIdParseError),
-}
-
-impl From<reqwest::Error> for ClientCreateError {
-    fn from(e: reqwest::Error) -> Self {
-        Self::Transport(e)
-    }
-}
-
-impl From<AuthenticationParseError> for ClientCreateError {
-    fn from(e: AuthenticationParseError) -> Self {
-        Self::AuthenticationParsing(e)
-    }
-}
-
-impl From<UserIdParseError> for ClientCreateError {
-    fn from(e: UserIdParseError) -> Self {
-        Self::UserIdParsing(e)
-    }
-}
-
-impl Display for ClientCreateError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Transport(e) => write!(f, "http error: {}", e),
-            Self::NotLoggedIn => write!(f, "not logged in"),
-            Self::AuthenticationParsing(e) => write!(f, "error parsing steam auth data: {}", e),
-            Self::UserIdParsing(e) => write!(f, "error parsing user id from steam: {}", e),
-        }
-    }
-}
-
 pub struct SteamClient {
-    username: String,
-    user_id: u64,
+    id: Id,
     http_client: Client,
+    username: String,
 
-    inventory_url: Url,
-    inventory_history_url: Url,
     cookie_str: String,
 }
 
 impl SteamClient {
-    pub async fn new(username: String, creds: SteamCredentials) -> Result<Self, ClientCreateError> {
-        let http_client = Client::builder().build()?;
-
+    pub fn new(id: Id, creds: SteamCredentials) -> Self {
+        let http_client = Client::builder().build().unwrap();
         let cookie_str = creds.as_string();
+        let username = String::from("");
 
-        let profile_url = format!("https://steamcommunity.com/id/{}", username);
-        let profile_resp = http_client
-            .get(&profile_url)
-            .header(COOKIE, &cookie_str)
-            .send()
-            .await?
-            .text()
-            .await?;
-        let parsed_profile_resp = Html::parse_document(&profile_resp);
-        let user_id = get_userid(&parsed_profile_resp).unwrap();
-
-        if !is_authenticated(&parsed_profile_resp)? {
-            return Err(ClientCreateError::NotLoggedIn);
-        }
-
-        let inventory_url = format!(
-            "https://steamcommunity.com/inventory/{}/730/2?l=english&count=25",
-            user_id
-        )
-        .parse()
-        .unwrap();
-        let inventory_history_url = format!("{}/inventoryhistory/?app[]=730", profile_url)
-            .parse()
-            .unwrap();
-
-        Ok(Self {
-            username,
-            user_id,
+        Self {
+            id,
             http_client,
-
-            inventory_url,
-            inventory_history_url,
+            username,
             cookie_str,
-        })
+        }
     }
 
     fn inv_history_req(&self) -> Request {
         self.http_client
-            .get(self.inventory_history_url.clone())
+            .get(self.id.inventory_history_url())
             .header("Cookie", &self.cookie_str)
             .build()
             .unwrap()
@@ -296,7 +235,7 @@ impl SteamClient {
     pub async fn is_authenticated(&self) -> Result<bool, AuthenticationCheckError> {
         let data = self
             .http_client
-            .get(self.inventory_url.as_ref())
+            .get(self.id.inventory_url())
             .header(COOKIE, &self.cookie_str)
             .send()
             .await?
@@ -361,7 +300,7 @@ impl SteamClient {
     ) -> Result<Vec<UnhydratedUnlock>, PrepareItemsError> {
         let resp = self
             .http_client
-            .get(self.inventory_url.clone())
+            .get(self.id.inventory_url())
             .send()
             .await?
             .error_for_status()?
@@ -407,7 +346,7 @@ impl SteamClient {
                 let item_market_link = link_tpl
                     .link
                     .replacen("%assetid%", &item_asset.asset_id.to_string(), 1)
-                    .replacen("%owner_steamid%", &self.user_id.to_string(), 1);
+                    .replacen("%owner_steamid%", &self.id.user_id().to_string(), 1);
 
                 let history_id = i.history_id;
                 let at = i.at;

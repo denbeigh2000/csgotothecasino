@@ -1,5 +1,7 @@
+use std::fmt::{self, Display};
+
 use regex::Regex;
-use reqwest::Client;
+use reqwest::{Client, Url};
 use scraper::Html;
 
 use super::parsing::{get_userid, UserIdParseError};
@@ -8,12 +10,14 @@ lazy_static::lazy_static! {
     static ref PROFILE_URL_REGEX: Regex = Regex::new(r#"steamcommunity\.com/(?:id/([a-zA-Z0-9-_]+)|profiles/([0-9]+))"#).unwrap();
 }
 
+#[derive(Clone)]
 pub struct Id {
     id: u64,
     vanity: Option<String>,
 
-    profile_url: String,
-    inventory_url: String,
+    profile_url: Url,
+    inventory_url: Url,
+    inventory_history_url: Url,
 }
 
 impl Id {
@@ -24,6 +28,7 @@ impl Id {
         };
 
         let inventory_url = format_inventory_url(id);
+        let inventory_history_url = format_inventory_history_url(profile_url.as_str());
 
         Self {
             id,
@@ -31,17 +36,18 @@ impl Id {
 
             profile_url,
             inventory_url,
+            inventory_history_url,
         }
     }
 
-    pub async fn try_from_url(client: Client, url_ish: &str) -> Result<Self, IdUrlParseError> {
+    pub async fn try_from_url(url_ish: &str) -> Result<Self, IdUrlParseError> {
         let url_match = parse_profile_url(url_ish).ok_or(IdUrlParseError::InvalidProfileUrl)?;
         let url = match &url_match {
             ProfileUrlMatch::SteamId(id) => format_profile_url_id(*id),
             ProfileUrlMatch::VanityUrl(v) => format_profile_url_vanity(v),
         };
-        let resp = client.get(&url).send().await?;
-        let profile_url = resp.url().to_string();
+        let resp = reqwest::get(url.as_ref()).await?;
+        let profile_url = resp.url().to_owned();
         if profile_url != url {
             // Should we do something different if we're given a by-id-only
             // url, and are redirected to a vanity url?
@@ -58,6 +64,7 @@ impl Id {
             ProfileUrlMatch::VanityUrl(v) => Some(v),
         };
         let inventory_url = format_inventory_url(id);
+        let inventory_history_url = format_inventory_history_url(profile_url.as_str());
 
         Ok(Self {
             id,
@@ -65,7 +72,24 @@ impl Id {
 
             profile_url,
             inventory_url,
+            inventory_history_url,
         })
+    }
+
+    pub fn user_id(&self) -> u64 {
+        self.id
+    }
+
+    pub fn inventory_url(&self) -> &str {
+        self.inventory_url.as_ref()
+    }
+
+    pub fn profile_url(&self) -> &str {
+        self.profile_url.as_ref()
+    }
+
+    pub fn inventory_history_url(&self) -> &str {
+        self.inventory_history_url.as_ref()
     }
 }
 
@@ -85,6 +109,19 @@ impl From<reqwest::Error> for IdUrlParseError {
 impl From<UserIdParseError> for IdUrlParseError {
     fn from(e: UserIdParseError) -> Self {
         Self::ValidationError(e)
+    }
+}
+
+impl Display for IdUrlParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "error fetching steam info: ")?;
+        match self {
+            IdUrlParseError::InvalidProfileUrl => write!(f, "invalid steam profile url"),
+            IdUrlParseError::TransportError(e) => write!(f, "http error: {}", e),
+            IdUrlParseError::ValidationError(e) => {
+                write!(f, "error parsing user information: {}", e)
+            }
+        }
     }
 }
 
@@ -108,19 +145,31 @@ fn parse_profile_url(url: &str) -> Option<ProfileUrlMatch> {
     }
 }
 
-fn format_profile_url_id(id: u64) -> String {
+fn format_profile_url_id(id: u64) -> Url {
     format!("https://steamcommunity.com/profiles/{}", id)
+        .parse()
+        .unwrap()
 }
 
-fn format_profile_url_vanity(vanity: &str) -> String {
+fn format_profile_url_vanity(vanity: &str) -> Url {
     format!("https://steamcommunity.com/id/{}", vanity)
+        .parse()
+        .unwrap()
 }
 
-fn format_inventory_url(id: u64) -> String {
+fn format_inventory_url(id: u64) -> Url {
     format!(
         "https://steamcommunity.com/inventory/{}/730/2?l=english&count=25",
         id
     )
+    .parse()
+    .unwrap()
+}
+
+fn format_inventory_history_url(base: &str) -> Url {
+    format!("{}/inventoryhistory/?app[]=730", base)
+        .parse()
+        .unwrap()
 }
 
 #[cfg(test)]

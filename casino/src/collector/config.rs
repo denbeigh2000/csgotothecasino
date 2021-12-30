@@ -34,7 +34,7 @@ impl Display for ConfigLoadError {
 
 #[derive(Serialize, Deserialize)]
 pub struct Config {
-    pub steam_username: String,
+    pub steam_profile_url: String,
     pub pre_shared_key: String,
 }
 

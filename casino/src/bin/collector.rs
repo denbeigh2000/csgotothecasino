@@ -6,7 +6,7 @@ use std::time::Duration;
 use casino::collector::config::{Config, ConfigLoadError};
 use casino::collector::{Collector, CollectorError};
 use casino::steam::errors::AuthenticationCheckError;
-use casino::steam::{ClientCreateError, CredentialParseError, SteamClient, SteamCredentials};
+use casino::steam::{CredentialParseError, Id, IdUrlParseError, SteamClient, SteamCredentials};
 use chrono::{NaiveDate, TimeZone, Utc};
 use clap::{App, Arg};
 use tokio::fs;
@@ -46,7 +46,9 @@ async fn main_result() -> Result<(), Error> {
     let cfg_path = args.value_of("config").ok_or(Error::NoConfigValue)?;
     let cfg = Config::try_from_path(cfg_path).await?;
 
-    let client = prepare_client(&cfg.steam_username).await?;
+    let id = Id::try_from_url(cfg.steam_profile_url).await?;
+
+    let client = prepare_client(id).await?;
 
     let interval_secs = args
         .value_of("interval")
@@ -71,6 +73,7 @@ async fn main_result() -> Result<(), Error> {
 enum Error {
     LoadingConfig(ConfigLoadError),
     PreparingClient(ClientPrepareError),
+    GatheringSteamIdInfo(IdUrlParseError),
     NoConfigValue,
     NoIntervalValue,
     InvalidIntervalValue(ParseIntError),
@@ -95,11 +98,18 @@ impl From<CollectorError> for Error {
     }
 }
 
+impl From<IdUrlParseError> for Error {
+    fn from(e: IdUrlParseError) -> Self {
+        Self::GatheringSteamIdInfo(e)
+    }
+}
+
 impl Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::LoadingConfig(e) => write!(f, "error loading config: {}", e),
-            Self::PreparingClient(e) => write!(f, "error : {}", e),
+            Self::PreparingClient(e) => write!(f, "error gathering user credentials: {}", e),
+            Self::GatheringSteamIdInfo(e) => write!(f, "error gathering steam id info: {}", e),
             Self::NoConfigValue => write!(f, "no value found for config path"),
             Self::NoIntervalValue => write!(f, "no value found for interval"),
             Self::InvalidIntervalValue(e) => write!(f, "error parsing polling interval: {}", e),
@@ -113,7 +123,6 @@ enum ClientPrepareError {
     IO(io::Error),
     Prompt(CredentialPromptError),
     AuthCheck(AuthenticationCheckError),
-    ClientCreate(ClientCreateError),
 }
 
 impl From<io::Error> for ClientPrepareError {
@@ -134,24 +143,17 @@ impl From<AuthenticationCheckError> for ClientPrepareError {
     }
 }
 
-impl From<ClientCreateError> for ClientPrepareError {
-    fn from(e: ClientCreateError) -> Self {
-        ClientPrepareError::ClientCreate(e)
-    }
-}
-
 impl Display for ClientPrepareError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::IO(e) => write!(f, "io error: {}", e),
             Self::Prompt(e) => write!(f, "error prompting for secrets: {}", e),
             Self::AuthCheck(e) => write!(f, "error checking for authentication: {}", e),
-            Self::ClientCreate(e) => write!(f, "error creating client: {}", e),
         }
     }
 }
 
-async fn prepare_client(steam_username: &str) -> Result<SteamClient, ClientPrepareError> {
+async fn prepare_client(id: Id) -> Result<SteamClient, ClientPrepareError> {
     if CREDS_PATH.exists() {
         let path = CREDS_PATH.as_path();
         let creds = match load_credentials_from_file(path).await {
@@ -165,7 +167,7 @@ async fn prepare_client(steam_username: &str) -> Result<SteamClient, ClientPrepa
         };
 
         if let Some(creds) = creds {
-            let client = SteamClient::new(steam_username.to_string(), creds).await?;
+            let client = SteamClient::new(id.clone(), creds);
             if client.is_authenticated().await? {
                 return Ok(client);
             }
@@ -182,7 +184,7 @@ async fn prepare_client(steam_username: &str) -> Result<SteamClient, ClientPrepa
             Err(CredentialPromptError::IO(e)) => return Err(e.into()),
         };
 
-        let client = SteamClient::new(steam_username.to_string(), creds.clone()).await?;
+        let client = SteamClient::new(id.clone(), creds.clone());
         if !client.is_authenticated().await? {
             eprintln!("authentication unsuccessful");
             continue;
