@@ -24,8 +24,8 @@ impl KeyStore {
         Self { keys }
     }
 
-    pub fn verify(&self, name: &str, given_key: &str) -> Option<bool> {
-        self.keys.get(name).map(|v| v == given_key)
+    pub fn get_user(&self, given_key: &str) -> Option<String> {
+        self.keys.get(given_key).map(|v| v.to_string())
     }
 }
 

@@ -46,7 +46,7 @@ async fn main_result() -> Result<(), Error> {
     let cfg_path = args.value_of("config").ok_or(Error::NoConfigValue)?;
     let cfg = Config::try_from_path(cfg_path).await?;
 
-    let id = Id::try_from_url(cfg.steam_profile_url).await?;
+    let id = Id::try_from_url(&cfg.steam_profile_url).await?;
 
     let client = prepare_client(id).await?;
 

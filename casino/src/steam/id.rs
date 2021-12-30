@@ -1,7 +1,7 @@
 use std::fmt::{self, Display};
 
 use regex::Regex;
-use reqwest::{Client, Url};
+use reqwest::Url;
 use scraper::Html;
 
 use super::parsing::{get_userid, UserIdParseError};

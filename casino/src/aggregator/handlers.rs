@@ -57,7 +57,6 @@ impl Display for HydrationError {
 #[derive(Debug)]
 pub enum SaveItemsError {
     BadKey,
-    PassingMultipleUsers,
     HydratingItem(HydrationError),
     SavingItem(StoreError),
     PublishingItem(StoreError),
@@ -86,7 +85,6 @@ impl Display for SaveItemsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::BadKey => write!(f, "bad/missing pre-shared key"),
-            Self::PassingMultipleUsers => write!(f, "data received for all users must be the same"),
             Self::HydratingItem(e) => write!(f, "error hydrating case item: {}", e),
             Self::SavingItem(e) => write!(f, "error persisting item: {}", e),
             Self::PublishingItem(e) => write!(f, "error publishing new item event: {}", e),
@@ -173,20 +171,23 @@ impl Handler {
         }
     }
 
-    pub async fn save(&self, key: &str, items: &[UnhydratedUnlock]) -> Result<(), SaveItemsError> {
+    pub async fn save(
+        &self,
+        key: &str,
+        items: Vec<UnhydratedUnlock>,
+    ) -> Result<(), SaveItemsError> {
         if items.is_empty() {
             return Ok(());
         }
 
-        let item = items.get(0).unwrap();
-        if !self.key_store.verify(&item.name, key).unwrap_or(false) {
-            return Err(SaveItemsError::BadKey);
-        }
-
-        // ensure all entries are for the same person
-        if !items.iter().all(|i| i.name == item.name) {
-            return Err(SaveItemsError::PassingMultipleUsers);
-        }
+        let name = self.key_store.get_user(key).ok_or(SaveItemsError::BadKey)?;
+        let items = items
+            .into_iter()
+            .map(|u| UnhydratedUnlock {
+                name: name.clone(),
+                ..u
+            })
+            .collect::<Vec<_>>();
 
         let urls: Vec<&str> = items.iter().map(|i| i.item_market_link.as_str()).collect();
         let float_info = self.csgofloat_client.get_bulk(&urls).await?;
@@ -215,7 +216,7 @@ impl Handler {
             };
 
             self.store
-                .append_entry(item)
+                .append_entry(&item)
                 .await
                 .map_err(SaveItemsError::SavingItem)?;
             self.store
@@ -311,14 +312,12 @@ pub async fn handle_upload(
         None => return Ok(resp_403()),
     };
 
-    let status = match h.save(key, &unlock).await {
+    let status = match h.save(key, unlock).await {
         Ok(_) => StatusCode::OK,
         Err(e) => {
             eprintln!("saving failed: {}", e);
             match e {
-                SaveItemsError::BadKey | SaveItemsError::PassingMultipleUsers => {
-                    StatusCode::UNAUTHORIZED
-                }
+                SaveItemsError::BadKey => StatusCode::UNAUTHORIZED,
                 _ => StatusCode::INTERNAL_SERVER_ERROR,
             }
         }
