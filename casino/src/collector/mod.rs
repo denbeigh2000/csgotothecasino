@@ -4,19 +4,25 @@ use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use hyper::header::AUTHORIZATION;
-use reqwest::{Client, Url};
+use reqwest::{Client, IntoUrl, Url};
 use tokio::time::interval;
 
 use crate::steam::errors::FetchItemsError;
 use crate::steam::{SteamClient, UnhydratedUnlock};
 
-lazy_static::lazy_static! {
-    static ref COLLECTION_URL: Url = "https://casino.denb.ee/api/upload".parse().unwrap();
-}
-
 pub mod config;
 
+#[derive(Debug)]
+pub struct UrlParseError(reqwest::Error);
+
+impl Display for UrlParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "given url was not valid: {}", self.0)
+    }
+}
+
 pub struct Collector {
+    collection_url: Url,
     http_client: Client,
     steam_client: SteamClient,
     pre_shared_key: String,
@@ -27,14 +33,21 @@ pub struct Collector {
 }
 
 impl Collector {
-    pub async fn new(
+    pub async fn new<U>(
+        collection_url: U,
         steam_client: SteamClient,
         pre_shared_key: String,
         poll_interval: Duration,
         start_time: Option<DateTime<Utc>>,
-    ) -> Self {
+    ) -> Result<Self, UrlParseError>
+    where
+        U: IntoUrl,
+    {
         let http_client = Client::new();
-        Self {
+        let collection_url: Url = collection_url.into_url().map_err(UrlParseError)?;
+
+        Ok(Self {
+            collection_url,
             http_client,
             steam_client,
             pre_shared_key,
@@ -42,7 +55,7 @@ impl Collector {
             poll_interval,
             last_unboxing: start_time,
             last_parsed_history_id: None,
-        }
+        })
     }
 
     pub async fn run(&mut self) -> Result<(), CollectorError> {
@@ -85,10 +98,13 @@ impl Collector {
 
     async fn send_results(&self, items: &[UnhydratedUnlock]) -> Result<(), ResultsSendError> {
         let data = serde_json::to_vec(items)?;
-        let url = COLLECTION_URL.clone();
-        log::info!("sending {} new items to {}", items.len(), url);
+        log::info!(
+            "sending {} new items to {}",
+            items.len(),
+            self.collection_url
+        );
         self.http_client
-            .post(url)
+            .post(self.collection_url.as_ref())
             .body(data)
             .header(AUTHORIZATION, &self.pre_shared_key)
             .send()

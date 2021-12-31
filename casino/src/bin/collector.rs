@@ -4,14 +4,12 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use casino::collector::config::{Config, ConfigLoadError};
-use casino::collector::{Collector, CollectorError};
+use casino::collector::{Collector, CollectorError, UrlParseError};
 use casino::logging;
 use casino::steam::errors::AuthenticationCheckError;
 use casino::steam::{CredentialParseError, Id, IdUrlParseError, SteamClient, SteamCredentials};
 use chrono::{NaiveDate, TimeZone, Utc};
 use clap::{App, Arg};
-use log::LevelFilter;
-use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
 use tokio::fs;
 use tokio::io::{self, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 
@@ -35,9 +33,18 @@ async fn main_result() -> Result<(), Error> {
                 .short("-i")
                 .long("--interval-secs")
                 .env("POLL_INTERVAL")
-                .help("Interval to poll Steam API")
+                .help("Interval to poll Steam API in seconds")
                 .takes_value(true)
-                .default_value("30"),
+                .default_value("10"),
+        )
+        .arg(
+            Arg::with_name("collection_url")
+                .short("-c")
+                .long("--collection-url")
+                .env("COLLECTION_URL")
+                .help("URL to upload entries to")
+                .takes_value(true)
+                .default_value("https://casino.denb.ee/api/upload"),
         )
         .arg(
             Arg::with_name("config")
@@ -66,12 +73,14 @@ async fn main_result() -> Result<(), Error> {
         .map_err(Error::InvalidIntervalValue)?;
     let interval = Duration::from_secs(interval_secs);
 
-    let naive_start_time = NaiveDate::from_ymd(2021, 11, 21).and_hms(0, 0, 0);
+    let collection_url = args.value_of("collection_url").unwrap();
+
+    let naive_start_time = NaiveDate::from_ymd(2021, 12, 21).and_hms(0, 0, 0);
     let start_time = Utc.from_local_datetime(&naive_start_time).unwrap();
     let st = Some(start_time);
 
-    Collector::new(client, cfg.pre_shared_key, interval, st)
-        .await
+    Collector::new(collection_url, client, cfg.pre_shared_key, interval, st)
+        .await?
         .run()
         .await?;
 
@@ -83,6 +92,7 @@ enum Error {
     LoadingConfig(ConfigLoadError),
     PreparingClient(ClientPrepareError),
     GatheringSteamIdInfo(IdUrlParseError),
+    CollectionUrlParse(UrlParseError),
     NoConfigValue,
     NoIntervalValue,
     InvalidIntervalValue(ParseIntError),
@@ -113,11 +123,18 @@ impl From<IdUrlParseError> for Error {
     }
 }
 
+impl From<UrlParseError> for Error {
+    fn from(e: UrlParseError) -> Self {
+        Self::CollectionUrlParse(e)
+    }
+}
+
 impl Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::LoadingConfig(e) => write!(f, "error loading config: {}", e),
             Self::PreparingClient(e) => write!(f, "error gathering user credentials: {}", e),
+            Self::CollectionUrlParse(e) => write!(f, "error parsing collection url: {}", e),
             Self::GatheringSteamIdInfo(e) => write!(f, "error gathering steam id info: {}", e),
             Self::NoConfigValue => write!(f, "no value found for config path"),
             Self::NoIntervalValue => write!(f, "no value found for interval"),
