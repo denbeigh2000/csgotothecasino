@@ -235,7 +235,7 @@ impl SteamClient {
     pub async fn is_authenticated(&self) -> Result<bool, AuthenticationCheckError> {
         let data = self
             .http_client
-            .get(self.id.inventory_url())
+            .get(self.id.profile_url())
             .header(COOKIE, &self.cookie_str)
             .send()
             .await?
