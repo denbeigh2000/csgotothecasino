@@ -13,10 +13,6 @@ use clap::{App, Arg};
 use tokio::fs;
 use tokio::io::{self, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 
-lazy_static::lazy_static! {
-    static ref CREDS_PATH: PathBuf = PathBuf::from("./.creds.json");
-}
-
 #[tokio::main]
 async fn main() {
     if let Err(e) = main_result().await {
@@ -47,9 +43,18 @@ async fn main_result() -> Result<(), Error> {
                 .default_value("https://casino.denb.ee/api/upload"),
         )
         .arg(
-            Arg::with_name("config")
+            Arg::with_name("credentials_path")
+                .short("-x")
+                .long("--credentials-path")
+                .env("CREDENTIALS_PATH")
+                .help("Path to credentials storage file")
+                .takes_value(true)
+                .default_value("./.creds.json"),
+        )
+        .arg(
+            Arg::with_name("config_path")
                 .index(1)
-                .env("POLL_INTERVAL")
+                .env("CONFIG_PATH")
                 .help("Path to configuration file")
                 .takes_value(true)
                 .default_value("./config.yaml"),
@@ -59,12 +64,14 @@ async fn main_result() -> Result<(), Error> {
     let log_level = args.value_of(logging::LEVEL_FLAG_NAME).unwrap();
     logging::init_str(log_level);
 
-    let cfg_path = args.value_of("config").ok_or(Error::NoConfigValue)?;
+    let cfg_path = args.value_of("config_path").ok_or(Error::NoConfigValue)?;
     let cfg = Config::try_from_path(cfg_path).await?;
 
     let id = Id::try_from_url(&cfg.steam_profile_url).await?;
 
-    let client = prepare_client(id).await?;
+    // NOTE: PathBuf's implementation of FromStr lists its' Err as Infallible
+    let creds_path: PathBuf = args.value_of("credentials_path").unwrap().parse().unwrap();
+    let client = prepare_client(id, AsRef::as_ref(&creds_path)).await?;
 
     let interval_secs = args
         .value_of("interval")
@@ -179,15 +186,14 @@ impl Display for ClientPrepareError {
     }
 }
 
-async fn prepare_client(id: Id) -> Result<SteamClient, ClientPrepareError> {
-    if CREDS_PATH.exists() {
-        let path = CREDS_PATH.as_path();
-        let creds = match load_credentials_from_file(path).await {
+async fn prepare_client(id: Id, creds_path: &Path) -> Result<SteamClient, ClientPrepareError> {
+    if creds_path.exists() {
+        let creds = match load_credentials_from_file(creds_path).await {
             Ok(creds) => Some(creds),
             Err(CredentialLoadSaveError::IO(e)) => return Err(e.into()),
             Err(CredentialLoadSaveError::Parse(e)) => {
                 log::warn!("error parsing credentials: {}", e);
-                fs::remove_file(path).await?;
+                fs::remove_file(creds_path).await?;
                 None
             }
         };
@@ -217,7 +223,7 @@ async fn prepare_client(id: Id) -> Result<SteamClient, ClientPrepareError> {
         }
 
         log::info!("authentication successful");
-        if let Err(e) = save_credentials_to_file(&CREDS_PATH, &creds).await {
+        if let Err(e) = save_credentials_to_file(creds_path, &creds).await {
             log::warn!("error saving credentials to file: {}", e);
             log::warn!("continuing without saving, you will need to enter these again next time");
         }
