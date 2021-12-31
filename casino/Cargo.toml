@@ -1,41 +1,12 @@
-[package]
-name = "casino"
-version = "0.1.0"
-edition = "2021"
+[workspace]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[[bin]]
-name = "collector"
-path = "src/bin/collector.rs"
-
-[[bin]]
-name = "aggregator"
-path = "src/bin/aggregator.rs"
-
-[[bin]]
-name = "bootstrap"
-path = "src/bin/bootstrap.rs"
-
-[dependencies]
-bb8-redis = "0.10"
-chrono = { version = "0.4", features = ["serde"] }
-clap = "2.34"
-futures-util = "0.3"
-hyper = { version = "0.14", features = ["http1", "server"] }
-hyper-tungstenite = "0.5"
-lazy_static = "1.4"
-log = "0.4"
-percent-encoding = "2.1"
-redis = { version = "0.21", features = [] }
-regex = "1"
-reqwest = { version = "0.11.8", features = ["cookies", "json", "stream"] }
-route-recognizer = "0.3"
-scraper = "0.12"
-serde = { version = "1.0", features = ["derive"] }
-serde-aux = "3.0"
-serde_json = "1.0"
-serde_repr = "0.1"
-serde_yaml = "0.8"
-simplelog = "0.11"
-tokio = { version = "1.15", features = ["fs", "io-std", "net", "rt-multi-thread", "process", "signal", "macros"] }
+members = [
+    "aggregator",
+    "bootstrap",
+    "cache",
+    "collector",
+    "csgofloat",
+    "logging",
+    "steam",
+    "store",
+]

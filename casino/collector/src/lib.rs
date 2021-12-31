@@ -3,12 +3,12 @@ use std::fmt::Display;
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use hyper::header::AUTHORIZATION;
 use reqwest::{Client, IntoUrl, Url};
+use reqwest::header::AUTHORIZATION;
 use tokio::time::interval;
 
-use crate::steam::errors::FetchItemsError;
-use crate::steam::{SteamClient, UnhydratedUnlock};
+use steam::errors::FetchItemsError;
+use steam::{SteamClient, UnhydratedUnlock};
 
 pub mod config;
 

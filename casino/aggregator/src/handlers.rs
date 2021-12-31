@@ -9,10 +9,10 @@ use hyper_tungstenite::{is_upgrade_request, HyperWebsocket};
 use super::http::{resp_400, resp_403, resp_500};
 use super::keystore::KeyStore;
 use super::websocket::{handle_emit, handle_recv, MessageSendError};
-use crate::csgofloat::{CsgoFloatClient, CsgoFloatFetchError};
-use crate::steam::errors::MarketPriceFetchError;
-use crate::steam::{MarketPriceClient, UnhydratedUnlock, Unlock};
-use crate::store::{Error as StoreError, Store};
+use csgofloat::{CsgoFloatClient, CsgoFloatFetchError};
+use steam::errors::MarketPriceFetchError;
+use steam::{MarketPriceClient, UnhydratedUnlock, Unlock};
+use store::{Error as StoreError, Store};
 
 #[derive(Debug)]
 pub enum HandlerError {

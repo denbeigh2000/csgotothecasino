@@ -1,0 +1,11 @@
+[package]
+name = "cache"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bb8-redis = "0.10"
+log = "0.4"
+redis = { version = "0.21", features = [] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"

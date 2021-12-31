@@ -1,0 +1,15 @@
+[package]
+name = "store"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+
+[dependencies]
+bb8-redis = "0.10"
+futures-util = "0.3"
+log = "0.4"
+redis = { version = "0.21", features = [] }
+serde_json = "1.0"
+
+steam = { path = "../steam" }

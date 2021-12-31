@@ -6,13 +6,12 @@ use std::sync::Arc;
 use bb8_redis::bb8::Pool;
 use bb8_redis::redis::{IntoConnectionInfo, RedisError};
 use bb8_redis::RedisConnectionManager;
-use hyper_tungstenite::hyper::Body;
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
-use reqwest::{Client, StatusCode};
+use reqwest::{Body, Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_repr::Deserialize_repr;
 
-use crate::cache::Cache;
+use cache::Cache;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Sticker {

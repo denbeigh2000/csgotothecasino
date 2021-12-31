@@ -1,0 +1,26 @@
+[package]
+name = "collector"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "collector"
+path = "src/main.rs"
+
+[dependencies]
+chrono = { version = "0.4", features = ["serde"] }
+clap = "2.34"
+futures-util = "0.3"
+log = "0.4"
+regex = "1"
+reqwest = { version = "0.11.8", features = ["cookies", "json"] }
+scraper = "0.12"
+serde = { version = "1.0", features = ["derive"] }
+serde-aux = "3.0"
+serde_json = "1.0"
+serde_repr = "0.1"
+serde_yaml = "0.8"
+tokio = { version = "1.15", features = ["fs", "io-std", "net", "rt-multi-thread", "signal", "macros"] }
+
+steam = { path = "../steam", features = [] }
+logging = { path = "../logging" }

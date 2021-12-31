@@ -3,7 +3,7 @@ use hyper_tungstenite::hyper::upgrade::Upgraded;
 use hyper_tungstenite::tungstenite::{self, Message};
 use hyper_tungstenite::WebSocketStream;
 
-use crate::steam::Unlock;
+use steam::Unlock;
 
 #[derive(Debug)]
 pub enum MessageSendError {

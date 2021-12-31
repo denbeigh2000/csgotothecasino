@@ -1,0 +1,11 @@
+[package]
+name = "logging"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+
+[dependencies]
+clap = "2.34"
+log = "0.4"
+simplelog = "0.11"

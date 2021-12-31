@@ -1,6 +1,5 @@
 use std::path::{Path, PathBuf};
 
-use casino::logging;
 use clap::{App, Arg};
 use reqwest::{Client, Url};
 use tokio::fs::File;

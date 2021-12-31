@@ -4,11 +4,11 @@ use std::sync::Arc;
 use bb8_redis::bb8::{Pool, PooledConnection, RunError};
 pub use bb8_redis::redis::aio::Connection;
 pub use bb8_redis::redis::{self, IntoConnectionInfo, RedisError, RedisResult};
-use bb8_redis::redis::{from_redis_value, AsyncCommands, Client, FromRedisValue, ToRedisArgs};
+use bb8_redis::redis::{AsyncCommands, Client};
 use bb8_redis::RedisConnectionManager;
 use futures_util::{Stream, StreamExt};
 
-use crate::steam::{UnhydratedUnlock, Unlock};
+use steam::{UnhydratedUnlock, Unlock};
 
 type Result<T> = std::result::Result<T, Error>;
 
@@ -25,40 +25,6 @@ impl Clone for Store {
             client: self.client.clone(),
             pool: Arc::clone(&self.pool),
         }
-    }
-}
-
-impl FromRedisValue for UnhydratedUnlock {
-    fn from_redis_value(v: &redis::Value) -> RedisResult<Self> {
-        let data: Vec<u8> = from_redis_value(v)?;
-        Ok(serde_json::from_slice(&data).unwrap())
-    }
-}
-
-impl ToRedisArgs for UnhydratedUnlock {
-    fn write_redis_args<W>(&self, out: &mut W)
-    where
-        W: ?Sized + redis::RedisWrite,
-    {
-        let data = serde_json::to_vec(self).unwrap();
-        out.write_arg(&data)
-    }
-}
-
-impl FromRedisValue for Unlock {
-    fn from_redis_value(v: &redis::Value) -> RedisResult<Self> {
-        let data: Vec<u8> = from_redis_value(v)?;
-        Ok(serde_json::from_slice(&data).unwrap())
-    }
-}
-
-impl ToRedisArgs for Unlock {
-    fn write_redis_args<W>(&self, out: &mut W)
-    where
-        W: ?Sized + redis::RedisWrite,
-    {
-        let data = serde_json::to_vec(self).unwrap();
-        out.write_arg(&data)
     }
 }
 

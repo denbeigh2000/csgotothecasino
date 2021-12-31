@@ -3,13 +3,12 @@ use std::num::ParseIntError;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use casino::collector::config::{Config, ConfigLoadError};
-use casino::collector::{Collector, CollectorError, UrlParseError};
-use casino::logging;
-use casino::steam::errors::AuthenticationCheckError;
-use casino::steam::{CredentialParseError, Id, IdUrlParseError, SteamClient, SteamCredentials};
-use chrono::{NaiveDate, TimeZone, Utc};
+use collector::config::{Config, ConfigLoadError};
+use collector::{Collector, CollectorError, UrlParseError};
+use chrono::Utc;
 use clap::{App, Arg};
+use steam::errors::AuthenticationCheckError;
+use steam::{CredentialParseError, Id, IdUrlParseError, SteamClient, SteamCredentials};
 use tokio::fs;
 use tokio::io::{self, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 

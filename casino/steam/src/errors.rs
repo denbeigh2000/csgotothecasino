@@ -1,6 +1,6 @@
 use std::fmt::{self, Display};
 
-use hyper::StatusCode;
+use reqwest::StatusCode;
 
 use super::parsing::{AuthenticationParseError, ParseFailure};
 
