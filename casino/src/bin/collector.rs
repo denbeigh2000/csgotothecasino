@@ -82,9 +82,10 @@ async fn main_result() -> Result<(), Error> {
 
     let collection_url = args.value_of("collection_url").unwrap();
 
-    let naive_start_time = NaiveDate::from_ymd(2021, 12, 21).and_hms(0, 0, 0);
-    let start_time = Utc.from_local_datetime(&naive_start_time).unwrap();
-    let st = Some(start_time);
+    let now = Utc::now();
+    let delta = chrono::Duration::from_std(Duration::from_secs(60 * 10)).unwrap();
+    let start = now - delta;
+    let st = Some(start);
 
     Collector::new(collection_url, client, cfg.pre_shared_key, interval, st)
         .await?
