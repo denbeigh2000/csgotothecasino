@@ -87,18 +87,16 @@ impl<T: DeserializeOwned + Serialize> Cache<T> {
         // to retreieve, because redis-rs' internal implementation can't
         // distinguish between a single item and a single-len vec, meaning it
         // issues a GET instead of an MGET, and returns a non-vec response.
-        if keys.is_empty() {
-            return Ok(HashMap::new());
-        } else if keys.len() == 1 {
-            let i = keys.get(0).unwrap();
-            return match self.get(i).await? {
-                None => Ok(HashMap::new()),
-                Some(r) => {
-                    let mut m = HashMap::with_capacity(1);
-                    m.insert(i.to_string(), r);
-                    Ok(m)
-                }
-            };
+        match *keys {
+            [] => return Ok(HashMap::new()),
+            [only] => {
+                return match self.get(only).await? {
+                    // Construct a map of 1 entry: only -> result
+                    Some(r) => Ok([(only.to_string(), r)].into()),
+                    None => Ok(HashMap::new()),
+                };
+            }
+            _ => (),
         }
 
         let mut conn = self.get_conn().await?;
