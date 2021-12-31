@@ -23,7 +23,7 @@ lazy_static::lazy_static! {
 async fn ctrl_c() {
     tokio::signal::ctrl_c().await.unwrap();
 
-    eprintln!("shutting down");
+    log::info!("shutting down");
 }
 
 pub async fn serve(bind_addr: &SocketAddr, handler: Handler) -> Result<(), Infallible> {
@@ -43,6 +43,8 @@ pub async fn serve(bind_addr: &SocketAddr, handler: Handler) -> Result<(), Infal
             }))
         }
     });
+
+    log::info!("serving on {}", bind_addr);
 
     hyper::Server::bind(bind_addr)
         .serve(svc)
@@ -64,7 +66,7 @@ async fn handle_request(h: &Handler, req: Request<Body>) -> Result<Response<Body
                 Route::Upload => handle_upload(h, req).await.map_err(HandlerError::SaveItems),
             }
             .unwrap_or_else(|e| {
-                eprintln!("error serving request: {}", e);
+                log::error!("error serving request: {}", e);
                 resp_500()
             });
 

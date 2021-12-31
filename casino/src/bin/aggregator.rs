@@ -9,11 +9,13 @@ use casino::aggregator::{serve, Handler};
 use casino::csgofloat::{CsgoFloatClient, CsgoFloatClientCreateError};
 use casino::steam::{MarketPriceClient, MarketPriceClientCreateError};
 use casino::store::{Error as StoreError, Store};
+use log::LevelFilter;
+use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
 
 #[tokio::main]
 async fn main() {
     if let Err(e) = real_main().await {
-        eprintln!("fatal error: {}", e);
+        log::error!("fatal error: {}", e);
         std::process::exit(1);
     }
 }
@@ -76,6 +78,19 @@ impl Display for Error {
 }
 
 async fn real_main() -> Result<(), Error> {
+    let log_config = ConfigBuilder::new()
+        .set_target_level(LevelFilter::Info)
+        .set_max_level(LevelFilter::Info)
+        .set_time_to_local(true)
+        .build();
+    TermLogger::init(
+        LevelFilter::Info,
+        log_config,
+        TerminalMode::Stderr,
+        ColorChoice::Auto,
+    )
+    .unwrap();
+
     let redis_url = env::var("REDIS_URL").expect("REDIS_URL unset");
     let csgofloat_key = env::var("CSGOFLOAT_KEY").expect("CSGOFLOAT_KEY unset");
     let info: ConnectionInfo = redis_url.parse().map_err(Error::InvalidRedisUrl)?;

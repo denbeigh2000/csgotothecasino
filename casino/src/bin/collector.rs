@@ -9,6 +9,8 @@ use casino::steam::errors::AuthenticationCheckError;
 use casino::steam::{CredentialParseError, Id, IdUrlParseError, SteamClient, SteamCredentials};
 use chrono::{NaiveDate, TimeZone, Utc};
 use clap::{App, Arg};
+use log::LevelFilter;
+use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
 use tokio::fs;
 use tokio::io::{self, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 
@@ -19,7 +21,7 @@ lazy_static::lazy_static! {
 #[tokio::main]
 async fn main() {
     if let Err(e) = main_result().await {
-        eprintln!("fatal error: {}", e);
+        log::error!("fatal error: {}", e);
         std::process::exit(1);
     }
 }
@@ -42,6 +44,19 @@ async fn main_result() -> Result<(), Error> {
                 .index(1),
         )
         .get_matches();
+
+    let log_config = ConfigBuilder::new()
+        .set_target_level(LevelFilter::Info)
+        .set_max_level(LevelFilter::Info)
+        .set_time_to_local(true)
+        .build();
+    TermLogger::init(
+        LevelFilter::Info,
+        log_config,
+        TerminalMode::Stderr,
+        ColorChoice::Auto,
+    )
+    .unwrap();
 
     let cfg_path = args.value_of("config").ok_or(Error::NoConfigValue)?;
     let cfg = Config::try_from_path(cfg_path).await?;
@@ -160,7 +175,7 @@ async fn prepare_client(id: Id) -> Result<SteamClient, ClientPrepareError> {
             Ok(creds) => Some(creds),
             Err(CredentialLoadSaveError::IO(e)) => return Err(e.into()),
             Err(CredentialLoadSaveError::Parse(e)) => {
-                eprintln!("error parsing credentials: {}", e);
+                log::warn!("error parsing credentials: {}", e);
                 fs::remove_file(path).await?;
                 None
             }
@@ -178,7 +193,7 @@ async fn prepare_client(id: Id) -> Result<SteamClient, ClientPrepareError> {
         let creds = match prompt_for_credentials().await {
             Ok(creds) => creds,
             Err(CredentialPromptError::CredentialParse(e)) => {
-                eprintln!("error parsing cookie: {}", e);
+                log::warn!("error parsing cookie: {}", e);
                 continue;
             }
             Err(CredentialPromptError::IO(e)) => return Err(e.into()),
@@ -186,14 +201,14 @@ async fn prepare_client(id: Id) -> Result<SteamClient, ClientPrepareError> {
 
         let client = SteamClient::new(id.clone(), creds.clone());
         if !client.is_authenticated().await? {
-            eprintln!("authentication unsuccessful");
+            log::warn!("authentication unsuccessful");
             continue;
         }
 
-        eprintln!("authentication successful");
+        log::info!("authentication successful");
         if let Err(e) = save_credentials_to_file(&CREDS_PATH, &creds).await {
-            eprintln!("error saving credentials to file: {}", e);
-            eprintln!("continuing without saving, you will need to enter these again next time");
+            log::warn!("error saving credentials to file: {}", e);
+            log::warn!("continuing without saving, you will need to enter these again next time");
         }
 
         return Ok(client);

@@ -47,6 +47,7 @@ impl Collector {
 
     pub async fn run(&mut self) -> Result<(), CollectorError> {
         let mut tick = interval(self.poll_interval);
+        log::info!("checking for new items every {}", self.poll_interval);
 
         loop {
             tokio::select! {
@@ -57,6 +58,7 @@ impl Collector {
     }
 
     async fn poll(&mut self) -> Result<(), CollectorError> {
+        log::info!("checking for new items");
         let since = self.last_unboxing.as_ref();
         let last_id = self.last_parsed_history_id.as_deref();
         let mut new_items = self
@@ -66,6 +68,7 @@ impl Collector {
             .unwrap();
 
         if new_items.is_empty() {
+            log::info!("no new items");
             return Ok(());
         }
 
@@ -80,6 +83,7 @@ impl Collector {
     async fn send_results(&self, items: &[UnhydratedUnlock]) -> Result<(), ResultsSendError> {
         let data = serde_json::to_vec(items)?;
         let url = COLLECTION_URL.clone();
+        log::info!("sending {} new items to {}", items.len(), url);
         self.http_client
             .post(url)
             .body(data)

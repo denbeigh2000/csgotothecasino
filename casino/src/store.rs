@@ -170,7 +170,7 @@ impl Store {
             let raw_data: String = match msg.get_payload() {
                 Ok(d) => d,
                 Err(e) => {
-                    eprintln!("failed to decode raw data: {}", e);
+                    log::error!("failed to decode raw data: {}", e);
                     return None;
                 }
             };
@@ -178,8 +178,8 @@ impl Store {
             match serde_json::from_str(&raw_data) {
                 Ok(u) => Some(u),
                 Err(e) => {
-                    eprintln!("failed to unmarshal response to json: {}", e);
-                    eprintln!("raw data was {}", &raw_data);
+                    log::error!("failed to unmarshal response to json: {}", e);
+                    log::error!("raw data was {}", &raw_data);
                     None
                 }
             }

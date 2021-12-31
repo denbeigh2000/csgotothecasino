@@ -411,8 +411,6 @@ pub async fn get_market_price(
     );
 
     let resp = client.get(url).send().await?.text().await?;
-
-    eprintln!("market prices for {}: {}", market_name, &resp);
     let parsed: RawMarketPrices = serde_json::from_str(&resp)?;
 
     Ok(parsed.into())
@@ -462,13 +460,13 @@ impl MarketPriceClient {
         match self.cache.get(market_name).await {
             Ok(Some(price)) => return Ok(price),
             Ok(None) => (),
-            Err(e) => eprintln!("failed to read entry from cache: {}", e),
+            Err(e) => log::warn!("failed to read entry from cache: {}", e),
         };
 
         let price = get_market_price(&self.client, market_name).await?;
 
         if let Err(e) = self.cache.set(market_name, &price).await {
-            eprintln!("error updating market cache: {}", e);
+            log::warn!("error updating market cache: {}", e);
         }
 
         Ok(price)

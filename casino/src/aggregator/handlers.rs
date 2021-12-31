@@ -279,6 +279,7 @@ pub async fn handle_state(
     req: Request<Body>,
 ) -> Result<Response<Body>, GetStateError> {
     if req.method() != Method::GET {
+        log::info!("not a GET request");
         return Ok(resp_400());
     }
 
@@ -294,7 +295,7 @@ pub async fn handle_upload(
     mut req: Request<Body>,
 ) -> Result<Response<Body>, SaveItemsError> {
     if req.method() != Method::POST {
-        eprintln!("bad request type");
+        log::info!("not a POST request");
         return Ok(resp_400());
     }
 
@@ -302,7 +303,7 @@ pub async fn handle_upload(
     let unlock: Vec<UnhydratedUnlock> = match serde_json::from_slice(&data) {
         Ok(u) => u,
         Err(e) => {
-            eprintln!("parsing failed: {}", e);
+            log::warn!("parsing failed: {}", e);
             return Ok(resp_400());
         }
     };
@@ -315,7 +316,7 @@ pub async fn handle_upload(
     let status = match h.save(key, unlock).await {
         Ok(_) => StatusCode::OK,
         Err(e) => {
-            eprintln!("saving failed: {}", e);
+            log::warn!("saving failed: {}", e);
             match e {
                 SaveItemsError::BadKey => StatusCode::UNAUTHORIZED,
                 _ => StatusCode::INTERNAL_SERVER_ERROR,
@@ -342,7 +343,7 @@ pub async fn handle_websocket(
     let stream = match h.event_stream().await {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("error opening event stream: {}", e);
+            log::error!("error opening event stream: {}", e);
             return Ok(resp_500());
         }
     };
@@ -372,7 +373,7 @@ impl Display for WebsocketServingError {
 
 async fn spawn_handle_websocket<S: Stream<Item = Unlock> + Unpin>(stream: S, ws: HyperWebsocket) {
     if let Err(e) = handle_upgraded_websocket(stream, ws).await {
-        eprintln!("error serving websocket: {}", e);
+        log::error!("error serving websocket: {}", e);
     }
 }
 
@@ -388,8 +389,8 @@ async fn handle_upgraded_websocket<S: Stream<Item = Unlock> + Unpin>(
                 let msg = match msg {
                     Some(Ok(m)) => m,
                     Some(Err(e)) => {
-                        eprintln!("error receiving message from websocket: {}", e);
-                        eprintln!("closing connection");
+                        log::warn!("error receiving message from websocket: {}", e);
+                        log::warn!("closing connection");
                         return Err(WebsocketServingError::Receiving(e));
                     },
                     None => return Ok(()),
@@ -415,7 +416,7 @@ async fn handle_upgraded_websocket<S: Stream<Item = Unlock> + Unpin>(
                 handle_emit(&mut ws, unlock).await.or_else(|e| match e {
                     MessageSendError::Transport(e) => Err(WebsocketServingError::Sending(e)),
                     MessageSendError::Serde(e) => {
-                        eprintln!("error marshaling message to send to client: {}", e);
+                        log::error!("error marshaling message to send to client: {}", e);
                         Ok(())
                     },
                 })?;

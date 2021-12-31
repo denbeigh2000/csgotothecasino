@@ -51,9 +51,10 @@ impl Id {
         if profile_url != url {
             // Should we do something different if we're given a by-id-only
             // url, and are redirected to a vanity url?
-            eprintln!(
-                "warning, was redirected from given url {} to canonical url {}",
-                url, profile_url
+            log::warn!(
+                "redirected from given url {} to canonical url {}",
+                url,
+                profile_url
             );
         }
         let resp_data = resp.text().await?;

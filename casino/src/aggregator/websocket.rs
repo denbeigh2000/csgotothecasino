@@ -37,7 +37,7 @@ pub async fn handle_emit(
 pub fn handle_recv(msg: Message) -> bool {
     match msg {
         Message::Close(_) => {
-            eprintln!("received close, shutting down");
+            log::info!("received close, shutting down");
             true
         }
         _ => false,
