@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use casino::collector::config::{Config, ConfigLoadError};
 use casino::collector::{Collector, CollectorError};
+use casino::logging;
 use casino::steam::errors::AuthenticationCheckError;
 use casino::steam::{CredentialParseError, Id, IdUrlParseError, SteamClient, SteamCredentials};
 use chrono::{NaiveDate, TimeZone, Utc};
@@ -28,35 +29,28 @@ async fn main() {
 
 async fn main_result() -> Result<(), Error> {
     let args = App::new("collector")
+        .arg(logging::build_arg())
         .arg(
             Arg::with_name("interval")
                 .short("-i")
                 .long("--interval-secs")
+                .env("POLL_INTERVAL")
                 .help("Interval to poll Steam API")
                 .takes_value(true)
                 .default_value("30"),
         )
         .arg(
             Arg::with_name("config")
+                .index(1)
+                .env("POLL_INTERVAL")
                 .help("Path to configuration file")
                 .takes_value(true)
-                .default_value("./config.yaml")
-                .index(1),
+                .default_value("./config.yaml"),
         )
         .get_matches();
 
-    let log_config = ConfigBuilder::new()
-        .set_target_level(LevelFilter::Info)
-        .set_max_level(LevelFilter::Info)
-        .set_time_to_local(true)
-        .build();
-    TermLogger::init(
-        LevelFilter::Info,
-        log_config,
-        TerminalMode::Stderr,
-        ColorChoice::Auto,
-    )
-    .unwrap();
+    let log_level = args.value_of(logging::LEVEL_FLAG_NAME).unwrap();
+    logging::init_str(log_level);
 
     let cfg_path = args.value_of("config").ok_or(Error::NoConfigValue)?;
     let cfg = Config::try_from_path(cfg_path).await?;

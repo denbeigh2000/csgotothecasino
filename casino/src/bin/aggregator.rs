@@ -1,16 +1,14 @@
-use std::env::VarError;
-use std::fmt::Display;
+use std::fmt::{self, Display};
 use std::net::{AddrParseError, SocketAddr};
-use std::{env, fmt};
 
-use bb8_redis::redis::{ConnectionInfo, RedisError};
 use casino::aggregator::keystore::{KeyStore, KeyStoreLoadSaveError};
 use casino::aggregator::{serve, Handler};
 use casino::csgofloat::{CsgoFloatClient, CsgoFloatClientCreateError};
+use casino::logging;
 use casino::steam::{MarketPriceClient, MarketPriceClientCreateError};
 use casino::store::{Error as StoreError, Store};
-use log::LevelFilter;
-use simplelog::{ColorChoice, ConfigBuilder, TermLogger, TerminalMode};
+use clap::{App, Arg};
+use redis::{ConnectionInfo, RedisError};
 
 #[tokio::main]
 async fn main() {
@@ -24,7 +22,6 @@ async fn main() {
 enum Error {
     InvalidBindIP(AddrParseError),
     InvalidRedisUrl(RedisError),
-    NonUnicodeBindAddr,
     CreatingCsgoFloatClient(CsgoFloatClientCreateError),
     CreatingStore(StoreError),
     LoadingKeystore(KeyStoreLoadSaveError),
@@ -66,7 +63,6 @@ impl Display for Error {
         match self {
             Self::InvalidBindIP(e) => write!(f, "invalid bind address given: {}", e),
             Self::InvalidRedisUrl(e) => write!(f, "invalid redis url given: {}", e),
-            Self::NonUnicodeBindAddr => write!(f, "non-unicode bind addr given"),
             Self::CreatingCsgoFloatClient(e) => write!(f, "error creating csgofloat client: {}", e),
             Self::CreatingStore(e) => write!(f, "error creating backing store: {}", e),
             Self::LoadingKeystore(e) => write!(f, "error loading keystore: {}", e),
@@ -78,35 +74,58 @@ impl Display for Error {
 }
 
 async fn real_main() -> Result<(), Error> {
-    let log_config = ConfigBuilder::new()
-        .set_target_level(LevelFilter::Info)
-        .set_max_level(LevelFilter::Info)
-        .set_time_to_local(true)
-        .build();
-    TermLogger::init(
-        LevelFilter::Info,
-        log_config,
-        TerminalMode::Stderr,
-        ColorChoice::Auto,
-    )
-    .unwrap();
+    let args = App::new("aggregator")
+        .arg(logging::build_arg())
+        .arg(
+            Arg::with_name("redis_url")
+                .short("-r")
+                .long("--redis-url")
+                .env("REDIS_URL")
+                .help("URL to connect to Redis with")
+                .takes_value(true)
+                .default_value("redis://redis:6379"),
+        )
+        .arg(
+            Arg::with_name("csgofloat_key")
+                .short("-c")
+                .long("--csgofloat-key")
+                .env("CSGOFLOAT_KEY")
+                .help("API key for CSGOFloat")
+                .takes_value(true)
+                .required(true),
+        )
+        .arg(
+            Arg::with_name("bind_addr")
+                .short("-b")
+                .long("--bind-addr")
+                .env("BIND_ADDR")
+                .help("Address to bind server to")
+                .takes_value(true)
+                .default_value("0.0.0.0:7000"),
+        )
+        .arg(
+            Arg::with_name("keystore_path")
+                .index(1)
+                .env("KEYSTORE_PATH")
+                .help("location of user keystore file")
+                .takes_value(true)
+                .default_value("./keystore.yaml"),
+        )
+        .get_matches();
 
-    let redis_url = env::var("REDIS_URL").expect("REDIS_URL unset");
-    let csgofloat_key = env::var("CSGOFLOAT_KEY").expect("CSGOFLOAT_KEY unset");
+    let log_level = args.value_of(logging::LEVEL_FLAG_NAME).unwrap();
+    logging::init_str(log_level);
+
+    let redis_url = args.value_of("redis_url").unwrap();
+    let csgofloat_key = args.value_of("csgofloat_key").unwrap();
+
     let info: ConnectionInfo = redis_url.parse().map_err(Error::InvalidRedisUrl)?;
+    let bind_addr: SocketAddr = args.value_of("bind_addr").unwrap().parse()?;
 
-    let bind_addr: SocketAddr = env::var("BIND_ADDR")
-        .map(Some)
-        .or_else(|e| match e {
-            VarError::NotPresent => Ok(None),
-            VarError::NotUnicode(_) => Err(Error::NonUnicodeBindAddr),
-        })?
-        .map(|a| a.parse())
-        .transpose()?
-        .unwrap_or_else(|| ([0, 0, 0, 0], 7000).into());
+    let keystore_path = args.value_of("keystore_path").unwrap();
+    let keystore = KeyStore::load_from_file(keystore_path).await?;
 
     let store = Store::new(info.clone()).await?;
-    let keystore = KeyStore::load_from_file("./keystore.yaml").await?;
     let csgo_float = CsgoFloatClient::new(csgofloat_key, info.clone()).await?;
     let market_price_client = MarketPriceClient::new(info).await?;
 

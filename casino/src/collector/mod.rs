@@ -47,7 +47,10 @@ impl Collector {
 
     pub async fn run(&mut self) -> Result<(), CollectorError> {
         let mut tick = interval(self.poll_interval);
-        log::info!("checking for new items every {}", self.poll_interval);
+        log::info!(
+            "checking for new items every {} seconds",
+            self.poll_interval.as_secs()
+        );
 
         loop {
             tokio::select! {
