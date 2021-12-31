@@ -2,11 +2,9 @@ use std::collections::HashMap;
 use std::fmt::{self, Display};
 use std::path::Path;
 
-use serde::Deserialize;
 use tokio::fs::File;
 use tokio::io::{self, AsyncReadExt};
 
-#[derive(Deserialize)]
 pub struct KeyStore {
     keys: HashMap<String, String>,
 }
@@ -15,9 +13,13 @@ impl KeyStore {
     pub async fn load_from_file<P: AsRef<Path>>(p: P) -> Result<Self, KeyStoreLoadSaveError> {
         let mut data: Vec<u8> = Vec::new();
         File::open(p).await?.read_to_end(&mut data).await?;
-        let parsed = serde_yaml::from_slice(&data)?;
+        let data: HashMap<String, String> = serde_yaml::from_slice(&data)?;
 
-        Ok(parsed)
+        // We want to be able to look up key -> user, but for convenience users
+        // should be able to provide user -> key
+        let inverted = data.into_iter().map(|(user, key)| (key, user)).collect();
+
+        Ok(Self::new(inverted))
     }
 
     pub fn new(keys: HashMap<String, String>) -> Self {
