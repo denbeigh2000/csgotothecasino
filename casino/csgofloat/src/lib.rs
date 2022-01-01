@@ -300,7 +300,7 @@ impl CsgoFloatClient {
         });
         let missing: Vec<&str> = urls
             .iter()
-            .filter(|u| !res.contains_key(**u))
+            .filter(|&u| !res.contains_key(*u))
             .copied()
             .collect();
 
