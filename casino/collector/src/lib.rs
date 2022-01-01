@@ -80,8 +80,7 @@ impl Collector {
         let mut new_items = self
             .steam_client
             .fetch_new_items(since, last_id)
-            .await
-            .unwrap();
+            .await?;
 
         if new_items.is_empty() {
             log::info!("no new items");

@@ -4,26 +4,19 @@ use std::fmt::{self, Display};
 use chrono::{DateTime, Utc};
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use regex::Regex;
-use reqwest::{Client, Request, StatusCode};
 use reqwest::header::COOKIE;
+use reqwest::{Client, Request, StatusCode};
 use scraper::Html;
 use serde::{Deserialize, Serialize};
 use serde_aux::field_attributes::deserialize_number_from_string;
 
 use crate::errors::{
-    AuthenticationCheckError,
-    FetchItemsError,
-    FetchNewUnpreparedItemsError,
+    AuthenticationCheckError, FetchItemsError, FetchNewUnpreparedItemsError, LocalPrepareError,
     PrepareItemsError,
 };
 pub use crate::id::{Id, IdUrlParseError};
 use crate::parsing::{
-    is_authenticated,
-    parse_raw_unlock,
-    InventoryId,
-    ParseSuccess,
-    RawUnlock,
-    TrivialItem,
+    is_authenticated, parse_raw_unlock, InventoryId, ParseSuccess, RawUnlock, TrivialItem,
     TRADE_SELECTOR,
 };
 
@@ -42,6 +35,8 @@ mod parsing;
 lazy_static::lazy_static! {
     static ref COOKIE_REGEX: Regex = Regex::new(r"[^\s=;]+=[^\s=;]+").unwrap();
 }
+
+type LocalPrepareResult = Result<UnhydratedUnlock, LocalPrepareError>;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UnhydratedUnlock {
@@ -109,6 +104,8 @@ impl SteamCredentials {
         }
 
         for cookie in cookies {
+            // unwrap should be safe - we are guaranteed exactly one = from
+            // our regex matching.
             match cookie.as_str().split_once('=').unwrap() {
                 ("sessionid", v) => session_id = Some(v.to_string()),
                 ("steamLoginSecure", v) => login_token = Some(maybe_url_encode(v.to_string())),
@@ -315,22 +312,27 @@ impl SteamClient {
                     acc
                 });
 
-        let results = items
+        let (results, errs): (Vec<_>, Vec<_>) = items
             .into_iter()
             .map(|i| {
                 let case = i.case;
                 let key = i.key;
-                let item_data = data_map.get(&i.item).unwrap();
-                let item_asset = asset_map.get(&i.item).unwrap();
+                let item_data = data_map
+                    .get(&i.item)
+                    .ok_or(LocalPrepareError::NoDescription)?;
+                let item_asset = asset_map.get(&i.item).ok_or(LocalPrepareError::NoAsset)?;
 
                 let item_market_name = item_data.name.clone();
-                let actions = item_data.actions.as_ref().unwrap();
+                let actions = item_data
+                    .actions
+                    .as_ref()
+                    .ok_or(LocalPrepareError::NoInspectLink)?;
                 let link_tpl = actions
                     .iter()
                     .find(|a| {
                         a.name.starts_with("Inspect") && a.link.starts_with("steam://rungame/730/")
                     })
-                    .unwrap();
+                    .ok_or(LocalPrepareError::NoInspectLink)?;
 
                 let item_market_link = link_tpl
                     .link
@@ -341,7 +343,7 @@ impl SteamClient {
                 let at = i.at;
                 let name = name.clone();
 
-                UnhydratedUnlock {
+                Ok(UnhydratedUnlock {
                     history_id,
 
                     key,
@@ -350,9 +352,15 @@ impl SteamClient {
                     item_market_name,
                     at,
                     name,
-                }
+                })
             })
-            .collect();
+            .partition(|r: &LocalPrepareResult| r.is_ok());
+
+        let results = results.into_iter().map(|r| r.unwrap()).collect();
+
+        for err in errs {
+            log::error!("not able to send item: {}", err.unwrap_err());
+        }
 
         Ok(results)
     }

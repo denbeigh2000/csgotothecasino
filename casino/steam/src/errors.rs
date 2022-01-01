@@ -156,3 +156,22 @@ impl From<AuthenticationParseError> for AuthenticationCheckError {
         Self::Parse(e)
     }
 }
+
+#[derive(Debug)]
+pub enum LocalPrepareError {
+    NoDescription,
+    NoAsset,
+    NoInspectLink,
+}
+
+impl Display for LocalPrepareError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let desc = match self {
+            Self::NoDescription => "could not find item description in inventory",
+            Self::NoAsset => "could not find item asset info in inventory",
+            Self::NoInspectLink => "could not find in-game inspect link",
+        };
+
+        write!(f, "error preparing steam unlock: {}", desc)
+    }
+}
