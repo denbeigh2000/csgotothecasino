@@ -1,4 +1,3 @@
-use std::fmt::{self, Display};
 use std::sync::Arc;
 
 use bb8_redis::RedisConnectionManager;
@@ -8,6 +7,7 @@ use bb8_redis::redis::RedisError;
 use cache::Cache;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 use super::errors::MarketPriceFetchError;
 
@@ -20,17 +20,17 @@ pub struct RawMarketPrices {
 
 impl From<RawMarketPrices> for MarketPrices {
     fn from(raw: RawMarketPrices) -> Self {
-        let volume = raw.volume.map(|v| v.replace(",", "").parse().unwrap());
+        let volume = raw.volume.map(|v| v.replace(',', "").parse().unwrap());
         Self {
-            lowest_price: raw.lowest_price.as_deref().map(parse_currency).flatten(),
-            median_price: raw.median_price.as_deref().map(parse_currency).flatten(),
+            lowest_price: raw.lowest_price.as_deref().and_then(parse_currency),
+            median_price: raw.median_price.as_deref().and_then(parse_currency),
             volume,
         }
     }
 }
 
 fn parse_currency(amt: &str) -> Option<f32> {
-    let chars = amt.replace(",", "");
+    let chars = amt.replace(',', "");
     let mut chars = chars.chars();
     chars.next();
     chars.as_str().parse::<f32>().ok()
@@ -58,25 +58,12 @@ pub async fn get_market_price(
     Ok(parsed.into())
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum MarketPriceClientCreateError {
+    #[error("invalid redis url given: {0}")]
     InvalidRedisUrl(RedisError),
-    Redis(RedisError),
-}
-
-impl From<RedisError> for MarketPriceClientCreateError {
-    fn from(e: RedisError) -> Self {
-        Self::Redis(e)
-    }
-}
-
-impl Display for MarketPriceClientCreateError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::InvalidRedisUrl(e) => write!(f, "invalid redis url given: {}", e),
-            Self::Redis(e) => write!(f, "error communicating with redis: {}", e),
-        }
-    }
+    #[error("error communicating with redis: {0}")]
+    Redis(#[from] RedisError),
 }
 
 pub struct MarketPriceClient {

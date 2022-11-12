@@ -1,7 +1,7 @@
 use std::collections::HashMap;
-use std::fmt::{self, Display};
 use std::path::Path;
 
+use thiserror::Error;
 use tokio::fs::File;
 use tokio::io::{self, AsyncReadExt};
 
@@ -31,29 +31,10 @@ impl KeyStore {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum KeyStoreLoadSaveError {
-    IO(io::Error),
-    Serde(serde_yaml::Error),
-}
-
-impl From<io::Error> for KeyStoreLoadSaveError {
-    fn from(e: io::Error) -> Self {
-        Self::IO(e)
-    }
-}
-
-impl From<serde_yaml::Error> for KeyStoreLoadSaveError {
-    fn from(e: serde_yaml::Error) -> Self {
-        Self::Serde(e)
-    }
-}
-
-impl Display for KeyStoreLoadSaveError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::IO(e) => write!(f, "io error: {}", e),
-            Self::Serde(e) => write!(f, "ser/deserialisation error: {}", e),
-        }
-    }
+    #[error("io error: {0}")]
+    IO(#[from] io::Error),
+    #[error("ser/deserialisation error: {0}")]
+    Serde(#[from] serde_yaml::Error),
 }

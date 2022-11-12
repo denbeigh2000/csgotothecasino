@@ -1,5 +1,3 @@
-use std::fmt;
-use std::fmt::Display;
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
@@ -9,17 +7,13 @@ use tokio::time::interval;
 
 use steam::errors::FetchItemsError;
 use steam::{SteamClient, UnhydratedUnlock};
+use thiserror::Error;
 
 pub mod config;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
+#[error("given url was not valid: {0}")]
 pub struct UrlParseError(reqwest::Error);
-
-impl Display for UrlParseError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "given url was not valid: {}", self.0)
-    }
-}
 
 pub struct Collector {
     collection_url: Url,
@@ -114,56 +108,18 @@ impl Collector {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum CollectorError {
-    FetchingItems(FetchItemsError),
-    SendingResults(ResultsSendError),
+    #[error("error fetching items: {0}")]
+    FetchingItems(#[from] FetchItemsError),
+    #[error("error sending results: {0}")]
+    SendingResults(#[from] ResultsSendError),
 }
 
-impl From<FetchItemsError> for CollectorError {
-    fn from(e: FetchItemsError) -> Self {
-        Self::FetchingItems(e)
-    }
-}
-
-impl From<ResultsSendError> for CollectorError {
-    fn from(e: ResultsSendError) -> Self {
-        Self::SendingResults(e)
-    }
-}
-
-impl Display for CollectorError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::FetchingItems(e) => write!(f, "error fetching items: {}", e),
-            Self::SendingResults(e) => write!(f, "error sending results: {}", e),
-        }
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ResultsSendError {
-    Serde(serde_json::Error),
-    Transport(reqwest::Error),
-}
-
-impl From<serde_json::Error> for ResultsSendError {
-    fn from(e: serde_json::Error) -> Self {
-        Self::Serde(e)
-    }
-}
-
-impl From<reqwest::Error> for ResultsSendError {
-    fn from(e: reqwest::Error) -> Self {
-        Self::Transport(e)
-    }
-}
-
-impl Display for ResultsSendError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ResultsSendError::Serde(e) => write!(f, "error serialising outbound items: {}", e),
-            ResultsSendError::Transport(e) => write!(f, "http error: {}", e),
-        }
-    }
+    #[error("error serialising outbound items: {0}")]
+    Serde(#[from] serde_json::Error),
+    #[error("http error: {0}")]
+    Transport(#[from] reqwest::Error),
 }

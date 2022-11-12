@@ -1,5 +1,5 @@
+#![allow(clippy::let_unit_value)]
 use std::collections::HashMap;
-use std::fmt::{self, Display};
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -8,8 +8,9 @@ use bb8_redis::redis::{AsyncCommands, RedisError};
 use bb8_redis::RedisConnectionManager;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use thiserror::Error;
 
-type Result<T> = std::result::Result<T, Error>;
+type Result<T> = std::result::Result<T, CacheError>;
 
 pub struct Cache<T: DeserializeOwned> {
     pool: Arc<Pool<RedisConnectionManager>>,
@@ -17,40 +18,21 @@ pub struct Cache<T: DeserializeOwned> {
     _data: PhantomData<T>,
 }
 
-#[derive(Debug)]
-pub enum Error {
-    Redis(RedisError),
-    Serde(serde_json::Error),
+#[derive(Debug, Error)]
+pub enum CacheError {
+    #[error("redis error: {0}")]
+    Redis(#[from] RedisError),
+    #[error("ser/deserialisation error: {0}")]
+    Serde(#[from] serde_json::Error),
+    #[error("could not acquire a connection in time")]
     ConnectionTimeout,
 }
 
-impl From<RedisError> for Error {
-    fn from(e: RedisError) -> Self {
-        Self::Redis(e)
-    }
-}
-
-impl From<RunError<RedisError>> for Error {
+impl From<RunError<RedisError>> for CacheError {
     fn from(e: RunError<RedisError>) -> Self {
         match e {
             RunError::User(e) => Self::Redis(e),
             RunError::TimedOut => Self::ConnectionTimeout,
-        }
-    }
-}
-
-impl From<serde_json::Error> for Error {
-    fn from(e: serde_json::Error) -> Self {
-        Self::Serde(e)
-    }
-}
-
-impl Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Redis(e) => write!(f, "redis error: {}", e),
-            Self::Serde(e) => write!(f, "ser/deserialisation error: {}", e),
-            Self::ConnectionTimeout => write!(f, "could not acquire a connection in time"),
         }
     }
 }

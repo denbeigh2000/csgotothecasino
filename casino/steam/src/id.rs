@@ -1,8 +1,7 @@
-use std::fmt::{self, Display};
-
 use regex::Regex;
 use reqwest::Url;
 use scraper::Html;
+use thiserror::Error;
 
 use super::parsing::{get_userid, UserIdParseError};
 
@@ -94,36 +93,14 @@ impl Id {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum IdUrlParseError {
+    #[error("invalid steam profile url")]
     InvalidProfileUrl,
-    TransportError(reqwest::Error),
-    ValidationError(UserIdParseError),
-}
-
-impl From<reqwest::Error> for IdUrlParseError {
-    fn from(e: reqwest::Error) -> Self {
-        Self::TransportError(e)
-    }
-}
-
-impl From<UserIdParseError> for IdUrlParseError {
-    fn from(e: UserIdParseError) -> Self {
-        Self::ValidationError(e)
-    }
-}
-
-impl Display for IdUrlParseError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "error fetching steam info: ")?;
-        match self {
-            IdUrlParseError::InvalidProfileUrl => write!(f, "invalid steam profile url"),
-            IdUrlParseError::TransportError(e) => write!(f, "http error: {}", e),
-            IdUrlParseError::ValidationError(e) => {
-                write!(f, "error parsing user information: {}", e)
-            }
-        }
-    }
+    #[error("http error: {0}")]
+    TransportError(#[from] reqwest::Error),
+    #[error("error parsing user information: {0}")]
+    ValidationError(#[from] UserIdParseError),
 }
 
 #[derive(Debug, PartialEq, Eq)]

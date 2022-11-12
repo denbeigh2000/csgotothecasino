@@ -1,11 +1,11 @@
-use std::fmt::{self, Display};
 use std::net::{AddrParseError, SocketAddr};
 
 use csgofloat::{CsgoFloatClient, CsgoFloatClientCreateError};
 use steam::{MarketPriceClient, MarketPriceClientCreateError};
-use store::{Error as StoreError, Store};
+use store::{StoreError as StoreError, Store};
 use clap::{App, Arg};
 use redis::{ConnectionInfo, RedisError};
+use thiserror::Error;
 
 use aggregator::keystore::{KeyStore, KeyStoreLoadSaveError};
 use aggregator::{serve, Handler};
@@ -18,62 +18,23 @@ async fn main() {
     }
 }
 
-#[derive(Debug)]
-enum Error {
-    InvalidBindIP(AddrParseError),
+#[derive(Debug, Error)]
+enum AggregatorError {
+    #[error("invalid bind address given: {0}")]
+    InvalidBindIP(#[from] AddrParseError),
+    #[error("invalid redis url given: {0}")]
     InvalidRedisUrl(RedisError),
-    CreatingCsgoFloatClient(CsgoFloatClientCreateError),
-    CreatingStore(StoreError),
-    LoadingKeystore(KeyStoreLoadSaveError),
-    CreatingMarketPriceClient(MarketPriceClientCreateError),
+    #[error("error creating csgofloat client: {0}")]
+    CreatingCsgoFloatClient(#[from] CsgoFloatClientCreateError),
+    #[error("error creating backing store: {0}")]
+    CreatingStore(#[from] StoreError),
+    #[error("error loading keystore: {0}")]
+    LoadingKeystore(#[from] KeyStoreLoadSaveError),
+    #[error("error creating steam market price client: {0}")]
+    CreatingMarketPriceClient(#[from] MarketPriceClientCreateError),
 }
 
-impl From<AddrParseError> for Error {
-    fn from(e: AddrParseError) -> Self {
-        Self::InvalidBindIP(e)
-    }
-}
-
-impl From<CsgoFloatClientCreateError> for Error {
-    fn from(e: CsgoFloatClientCreateError) -> Self {
-        Self::CreatingCsgoFloatClient(e)
-    }
-}
-
-impl From<StoreError> for Error {
-    fn from(e: StoreError) -> Self {
-        Self::CreatingStore(e)
-    }
-}
-
-impl From<KeyStoreLoadSaveError> for Error {
-    fn from(e: KeyStoreLoadSaveError) -> Self {
-        Self::LoadingKeystore(e)
-    }
-}
-
-impl From<MarketPriceClientCreateError> for Error {
-    fn from(e: MarketPriceClientCreateError) -> Self {
-        Self::CreatingMarketPriceClient(e)
-    }
-}
-
-impl Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::InvalidBindIP(e) => write!(f, "invalid bind address given: {}", e),
-            Self::InvalidRedisUrl(e) => write!(f, "invalid redis url given: {}", e),
-            Self::CreatingCsgoFloatClient(e) => write!(f, "error creating csgofloat client: {}", e),
-            Self::CreatingStore(e) => write!(f, "error creating backing store: {}", e),
-            Self::LoadingKeystore(e) => write!(f, "error loading keystore: {}", e),
-            Self::CreatingMarketPriceClient(e) => {
-                write!(f, "error creating steam market price client: {}", e)
-            }
-        }
-    }
-}
-
-async fn real_main() -> Result<(), Error> {
+async fn real_main() -> Result<(), AggregatorError> {
     let args = App::new("aggregator")
         .arg(logging::build_arg())
         .arg(
@@ -119,7 +80,7 @@ async fn real_main() -> Result<(), Error> {
     let redis_url = args.value_of("redis_url").unwrap();
     let csgofloat_key = args.value_of("csgofloat_key").unwrap();
 
-    let info: ConnectionInfo = redis_url.parse().map_err(Error::InvalidRedisUrl)?;
+    let info: ConnectionInfo = redis_url.parse().map_err(AggregatorError::InvalidRedisUrl)?;
     let bind_addr: SocketAddr = args.value_of("bind_addr").unwrap().parse()?;
 
     let keystore_path = args.value_of("keystore_path").unwrap();

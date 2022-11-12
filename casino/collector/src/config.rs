@@ -1,35 +1,16 @@
-use std::fmt::{self, Display};
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 use tokio::fs::File;
 use tokio::io::{self, AsyncReadExt};
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ConfigLoadError {
-    IO(io::Error),
-    Serde(serde_yaml::Error),
-}
-
-impl From<io::Error> for ConfigLoadError {
-    fn from(e: io::Error) -> Self {
-        Self::IO(e)
-    }
-}
-
-impl From<serde_yaml::Error> for ConfigLoadError {
-    fn from(e: serde_yaml::Error) -> Self {
-        Self::Serde(e)
-    }
-}
-
-impl Display for ConfigLoadError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ConfigLoadError::IO(e) => write!(f, "io error: {}", e),
-            ConfigLoadError::Serde(e) => write!(f, "deserialisation error: {}", e),
-        }
-    }
+    #[error("io error: {0}")]
+    IO(#[from] io::Error),
+    #[error("deserialisation error: {0}")]
+    Serde(#[from] serde_yaml::Error),
 }
 
 #[derive(Serialize, Deserialize)]

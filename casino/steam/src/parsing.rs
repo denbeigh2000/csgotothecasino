@@ -1,10 +1,10 @@
-use std::fmt::{self, Display};
 use std::num::ParseIntError;
 
 use chrono::{DateTime, Local, NaiveDateTime, TimeZone, Utc};
 use regex::Regex;
 use scraper::{ElementRef, Html, Selector};
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 lazy_static::lazy_static! {
     pub static ref LOGIN_AREA_SELECTOR: Selector = Selector::parse("#global_actions").unwrap();
@@ -85,91 +85,56 @@ pub enum ParseSuccess {
     WrongTransactionType,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ParseFailure {
+    #[error("could not find trade description")]
     MissingDescription,
+    #[error("could not find trade description text")]
     MissingDescriptionText,
+    #[error("could not find trade date")]
     MissingDate,
+    #[error("could not find trade time")]
     MissingTime,
+    #[error("could not parse date from existing format")]
     DateFormattingChanged,
+    #[error("could not find lost items from unboxing")]
     MissingLostItems,
+    #[error("could not used container from unboxing")]
     MissingLostCase,
+    #[error("could not find items gained from unboxing")]
     MissingGainedItems,
+    #[error("could not find item gained from unboxing")]
     MissingGainedItem,
+    #[error("could not find id associated with trade")]
     MissingTradeId,
+    #[error("could not parse trade id from element")]
     TradeIdFormattingChanged,
-    TrivialItemParsing(TrivialItemParseError),
+    #[error("could not parse trivial item: {0}")]
+    TrivialItemParsing(#[from] TrivialItemParseError),
 }
 
-impl Display for ParseFailure {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "error parsing inventory history: ")?;
-        match self {
-            Self::MissingDescription => write!(f, "could not find trade description"),
-            Self::MissingDescriptionText => write!(f, "could not find trade description text"),
-            Self::MissingDate => write!(f, "could not find trade date"),
-            Self::MissingTime => write!(f, "could not find trade time"),
-            Self::DateFormattingChanged => write!(f, "could not parse date from existing format"),
-            Self::MissingLostItems => write!(f, "could not find lost items from unboxing"),
-            Self::MissingLostCase => write!(f, "could not used container from unboxing"),
-            Self::MissingGainedItems => write!(f, "could not find items gained from unboxing"),
-            Self::MissingGainedItem => write!(f, "could not find item gained from unboxing"),
-            Self::MissingTradeId => write!(f, "could not find id associated with trade"),
-            Self::TradeIdFormattingChanged => write!(f, "could not parse trade id from element"),
-            Self::TrivialItemParsing(e) => write!(f, "could not parse trivial item: {}", e),
-        }
-    }
-}
-
-impl From<TrivialItemParseError> for ParseFailure {
-    fn from(e: TrivialItemParseError) -> Self {
-        Self::TrivialItemParsing(e)
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum TrivialItemParseError {
+    #[error("could not find item name node")]
     MissingNameNode,
+    #[error("could not find item name text")]
     MissingNameText,
+    #[error("could not find item image node")]
     MissingImageNode,
+    #[error("could not find item image text")]
     MissingImageText,
+    #[error("image url format has changed")]
     ImageURLFormatChanged,
 }
 
-impl Display for TrivialItemParseError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "error parsing trivial item: ")?;
-        match self {
-            Self::MissingNameNode => write!(f, "could not find item name node"),
-            Self::MissingNameText => write!(f, "could not find item name text"),
-            Self::MissingImageNode => write!(f, "could not find item image node"),
-            Self::MissingImageText => write!(f, "could not find item image text"),
-            Self::ImageURLFormatChanged => write!(f, "image url format has changed"),
-        }
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum UserIdParseError {
+    #[error("could not find user id element")]
     MissingUserIdElement,
-    BadUserId(ParseIntError),
+    #[error("error parsing user id: {0}")]
+    BadUserId(#[from] ParseIntError),
+    #[error("error parsing steam user id")]
     UserIdElementParseError,
-}
-
-impl From<ParseIntError> for UserIdParseError {
-    fn from(e: ParseIntError) -> Self {
-        Self::BadUserId(e)
-    }
-}
-
-impl Display for UserIdParseError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::MissingUserIdElement => write!(f, "could not find user id element"),
-            Self::BadUserId(e) => write!(f, "error parsing user id: {}", e),
-            Self::UserIdElementParseError => write!(f, "error parsing steam user id"),
-        }
-    }
 }
 
 pub fn get_userid(page: &Html) -> Result<u64, UserIdParseError> {
@@ -189,19 +154,12 @@ pub fn get_userid(page: &Html) -> Result<u64, UserIdParseError> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum AuthenticationParseError {
+    #[error("could not find login area on page")]
     MissingSteamLoginArea,
+    #[error("found login area, but not indicator")]
     MissingLoginOrUserInfo,
-}
-
-impl Display for AuthenticationParseError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::MissingSteamLoginArea => write!(f, "could not find login area on page"),
-            Self::MissingLoginOrUserInfo => write!(f, "found login area, but not indicator"),
-        }
-    }
 }
 
 pub fn is_authenticated(page: &Html) -> Result<bool, AuthenticationParseError> {

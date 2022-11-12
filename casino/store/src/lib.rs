@@ -1,4 +1,5 @@
-use std::fmt::{self, Display};
+#![allow(clippy::let_unit_value)]
+
 use std::sync::Arc;
 
 use bb8_redis::bb8::{Pool, PooledConnection, RunError};
@@ -7,10 +8,11 @@ pub use bb8_redis::redis::{self, IntoConnectionInfo, RedisError, RedisResult};
 use bb8_redis::redis::{AsyncCommands, Client};
 use bb8_redis::RedisConnectionManager;
 use futures_util::{Stream, StreamExt};
+use thiserror::Error;
 
 use steam::{UnhydratedUnlock, Unlock};
 
-type Result<T> = std::result::Result<T, Error>;
+type Result<T> = std::result::Result<T, StoreError>;
 
 const EVENT_KEY: &str = "new_events";
 
@@ -28,24 +30,17 @@ impl Clone for Store {
     }
 }
 
-#[derive(Debug)]
-pub enum Error {
+#[derive(Debug, Error)]
+pub enum StoreError {
+    #[error("connection timeout")]
     ConnectionTimeout,
-    Redis(RedisError),
-    Serde(serde_json::Error),
+    #[error("error interacting with redis: {0}")]
+    Redis(#[from] RedisError),
+    #[error("error serialising/deserialising: {0}")]
+    Serde(#[from] serde_json::Error),
 }
 
-impl Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::ConnectionTimeout => write!(f, "connection timeout"),
-            Self::Redis(e) => write!(f, "error interacting with redis: {}", e),
-            Self::Serde(e) => write!(f, "error serialising/deserialising: {}", e),
-        }
-    }
-}
-
-impl From<RunError<RedisError>> for Error {
+impl From<RunError<RedisError>> for StoreError {
     fn from(e: RunError<RedisError>) -> Self {
         match e {
             RunError::User(e) => Self::Redis(e),
@@ -54,17 +49,6 @@ impl From<RunError<RedisError>> for Error {
     }
 }
 
-impl From<RedisError> for Error {
-    fn from(e: RedisError) -> Self {
-        Self::Redis(e)
-    }
-}
-
-impl From<serde_json::Error> for Error {
-    fn from(e: serde_json::Error) -> Self {
-        Self::Serde(e)
-    }
-}
 
 impl Store {
     pub async fn new<T: IntoConnectionInfo>(i: T) -> Result<Self> {

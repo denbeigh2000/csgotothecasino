@@ -1,4 +1,3 @@
-use std::fmt::{self, Display};
 use std::num::ParseIntError;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -9,6 +8,7 @@ use chrono::Utc;
 use clap::{App, Arg};
 use steam::errors::AuthenticationCheckError;
 use steam::{CredentialParseError, Id, IdUrlParseError, SteamClient, SteamCredentials};
+use thiserror::Error;
 use tokio::fs;
 use tokio::io::{self, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 
@@ -20,7 +20,7 @@ async fn main() {
     }
 }
 
-async fn main_result() -> Result<(), Error> {
+async fn main_result() -> Result<(), MainError> {
     let args = App::new("collector")
         .arg(logging::build_arg())
         .arg(
@@ -63,7 +63,7 @@ async fn main_result() -> Result<(), Error> {
     let log_level = args.value_of(logging::LEVEL_FLAG_NAME).unwrap();
     logging::init_str(log_level);
 
-    let cfg_path = args.value_of("config_path").ok_or(Error::NoConfigValue)?;
+    let cfg_path = args.value_of("config_path").ok_or(MainError::NoConfigValue)?;
     let cfg = Config::try_from_path(cfg_path).await?;
 
     let id = Id::try_from_url(&cfg.steam_profile_url).await?;
@@ -74,9 +74,9 @@ async fn main_result() -> Result<(), Error> {
 
     let interval_secs = args
         .value_of("interval")
-        .ok_or(Error::NoIntervalValue)?
+        .ok_or(MainError::NoIntervalValue)?
         .parse()
-        .map_err(Error::InvalidIntervalValue)?;
+        .map_err(MainError::InvalidIntervalValue)?;
     let interval = Duration::from_secs(interval_secs);
 
     let collection_url = args.value_of("collection_url").unwrap();
@@ -94,97 +94,37 @@ async fn main_result() -> Result<(), Error> {
     Ok(())
 }
 
-#[derive(Debug)]
-enum Error {
-    LoadingConfig(ConfigLoadError),
-    PreparingClient(ClientPrepareError),
-    GatheringSteamIdInfo(IdUrlParseError),
-    CollectionUrlParse(UrlParseError),
+#[derive(Debug, Error)]
+enum MainError {
+    #[error("error loading config: {0}")]
+    LoadingConfig(#[from] ConfigLoadError),
+    #[error("error gathering user credentials: {0}")]
+    PreparingClient(#[from] ClientPrepareError),
+    #[error("error gathering steam id info: {0}")]
+    GatheringSteamIdInfo(#[from] IdUrlParseError),
+    #[error("error parsing collection url: {0}")]
+    CollectionUrlParse(#[from] UrlParseError),
+    #[error("no value found for config path")]
     NoConfigValue,
+    #[error("no value found for interval")]
     NoIntervalValue,
-    InvalidIntervalValue(ParseIntError),
-    RunningCollector(CollectorError),
+    #[error("error parsing polling interval: {0}")]
+    InvalidIntervalValue(#[from] ParseIntError),
+    #[error("error running main loop: {0}")]
+    RunningCollector(#[from] CollectorError),
 }
 
-impl From<ConfigLoadError> for Error {
-    fn from(e: ConfigLoadError) -> Self {
-        Self::LoadingConfig(e)
-    }
-}
 
-impl From<ClientPrepareError> for Error {
-    fn from(e: ClientPrepareError) -> Self {
-        Self::PreparingClient(e)
-    }
-}
-
-impl From<CollectorError> for Error {
-    fn from(e: CollectorError) -> Self {
-        Self::RunningCollector(e)
-    }
-}
-
-impl From<IdUrlParseError> for Error {
-    fn from(e: IdUrlParseError) -> Self {
-        Self::GatheringSteamIdInfo(e)
-    }
-}
-
-impl From<UrlParseError> for Error {
-    fn from(e: UrlParseError) -> Self {
-        Self::CollectionUrlParse(e)
-    }
-}
-
-impl Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::LoadingConfig(e) => write!(f, "error loading config: {}", e),
-            Self::PreparingClient(e) => write!(f, "error gathering user credentials: {}", e),
-            Self::CollectionUrlParse(e) => write!(f, "error parsing collection url: {}", e),
-            Self::GatheringSteamIdInfo(e) => write!(f, "error gathering steam id info: {}", e),
-            Self::NoConfigValue => write!(f, "no value found for config path"),
-            Self::NoIntervalValue => write!(f, "no value found for interval"),
-            Self::InvalidIntervalValue(e) => write!(f, "error parsing polling interval: {}", e),
-            Self::RunningCollector(e) => write!(f, "error running main loop: {}", e),
-        }
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Error)]
 enum ClientPrepareError {
-    IO(io::Error),
-    Prompt(CredentialPromptError),
-    AuthCheck(AuthenticationCheckError),
+    #[error("io error: {0}")]
+    IO(#[from] io::Error),
+    #[error("error prompting for secrets: {0}")]
+    Prompt(#[from] CredentialPromptError),
+    #[error("error checking for authentication: {0}")]
+    AuthCheck(#[from] AuthenticationCheckError),
 }
 
-impl From<io::Error> for ClientPrepareError {
-    fn from(e: io::Error) -> Self {
-        Self::IO(e)
-    }
-}
-
-impl From<CredentialPromptError> for ClientPrepareError {
-    fn from(e: CredentialPromptError) -> Self {
-        Self::Prompt(e)
-    }
-}
-
-impl From<AuthenticationCheckError> for ClientPrepareError {
-    fn from(e: AuthenticationCheckError) -> Self {
-        Self::AuthCheck(e)
-    }
-}
-
-impl Display for ClientPrepareError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::IO(e) => write!(f, "io error: {}", e),
-            Self::Prompt(e) => write!(f, "error prompting for secrets: {}", e),
-            Self::AuthCheck(e) => write!(f, "error checking for authentication: {}", e),
-        }
-    }
-}
 
 async fn prepare_client(id: Id, creds_path: &Path) -> Result<SteamClient, ClientPrepareError> {
     if creds_path.exists() {
@@ -232,33 +172,12 @@ async fn prepare_client(id: Id, creds_path: &Path) -> Result<SteamClient, Client
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 enum CredentialPromptError {
-    CredentialParse(CredentialParseError),
-    IO(io::Error),
-}
-
-impl From<CredentialParseError> for CredentialPromptError {
-    fn from(e: CredentialParseError) -> Self {
-        Self::CredentialParse(e)
-    }
-}
-
-impl From<io::Error> for CredentialPromptError {
-    fn from(e: io::Error) -> Self {
-        Self::IO(e)
-    }
-}
-
-impl Display for CredentialPromptError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            CredentialPromptError::CredentialParse(e) => {
-                write!(f, "error parsing credentials: {}", e)
-            }
-            CredentialPromptError::IO(e) => write!(f, "io error: {}", e),
-        }
-    }
+    #[error("error parsing credentials: {0}")]
+    CredentialParse(#[from] CredentialParseError),
+    #[error("io error: {0}")]
+    IO(#[from] io::Error),
 }
 
 async fn prompt_for_credentials() -> Result<SteamCredentials, CredentialPromptError> {
@@ -277,31 +196,12 @@ async fn prompt_for_credentials() -> Result<SteamCredentials, CredentialPromptEr
     Ok(creds)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 enum CredentialLoadSaveError {
-    Parse(serde_json::Error),
-    IO(io::Error),
-}
-
-impl Display for CredentialLoadSaveError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            CredentialLoadSaveError::Parse(e) => write!(f, "error parsing json: {}", e),
-            CredentialLoadSaveError::IO(e) => write!(f, "io error: {}", e),
-        }
-    }
-}
-
-impl From<io::Error> for CredentialLoadSaveError {
-    fn from(e: io::Error) -> Self {
-        Self::IO(e)
-    }
-}
-
-impl From<serde_json::Error> for CredentialLoadSaveError {
-    fn from(e: serde_json::Error) -> Self {
-        Self::Parse(e)
-    }
+    #[error("error parsing json: {0}")]
+    Parse(#[from] serde_json::Error),
+    #[error("io error: {0}")]
+    IO(#[from] io::Error),
 }
 
 async fn load_credentials_from_file(p: &Path) -> Result<SteamCredentials, CredentialLoadSaveError> {

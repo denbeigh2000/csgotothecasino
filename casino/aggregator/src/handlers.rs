@@ -1,10 +1,9 @@
-use std::fmt::{self, Display};
-
 use futures_util::{SinkExt, Stream, StreamExt};
 use hyper::header::AUTHORIZATION;
 use hyper_tungstenite::hyper::{Body, Method, Request, Response, StatusCode};
 use hyper_tungstenite::tungstenite::{self, Message};
 use hyper_tungstenite::{is_upgrade_request, HyperWebsocket};
+use thiserror::Error;
 
 use super::http::{resp_400, resp_403, resp_500};
 use super::keystore::KeyStore;
@@ -12,67 +11,40 @@ use super::websocket::{handle_emit, handle_recv, MessageSendError};
 use csgofloat::{CsgoFloatClient, CsgoFloatFetchError};
 use steam::errors::MarketPriceFetchError;
 use steam::{MarketPriceClient, UnhydratedUnlock, Unlock};
-use store::{Error as StoreError, Store};
+use store::{StoreError as StoreError, Store};
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum HandlerError {
-    GetState(GetStateError),
-    SaveItems(SaveItemsError),
-    StreamItems(StreamError),
+    #[error("error serving get_state request: {0}")]
+    GetState(#[from] GetStateError),
+    #[error("error serving save request: {0}")]
+    SaveItems(#[from] SaveItemsError),
+    #[error("error serving stream request: {0}")]
+    StreamItems(#[from] StreamError),
 }
 
-impl Display for HandlerError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            HandlerError::GetState(e) => write!(f, "error serving get_state request: {}", e),
-            HandlerError::SaveItems(e) => write!(f, "error serving save request: {}", e),
-            HandlerError::StreamItems(e) => write!(f, "error serving stream request: {}", e),
-        }
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum HydrationError {
+    #[error("error fetching case price: {0}")]
     CasePrice(MarketPriceFetchError),
+    #[error("error fetching item price: {0}")]
     ItemPrice(MarketPriceFetchError),
-    FloatInfo(CsgoFloatFetchError),
+    #[error("error fetching float information: {0}")]
+    FloatInfo(#[from] CsgoFloatFetchError),
 }
 
-impl From<CsgoFloatFetchError> for HydrationError {
-    fn from(e: CsgoFloatFetchError) -> Self {
-        Self::FloatInfo(e)
-    }
-}
-
-impl Display for HydrationError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::CasePrice(e) => write!(f, "error fetching case price: {}", e),
-            Self::ItemPrice(e) => write!(f, "error fetching item price: {}", e),
-            Self::FloatInfo(e) => write!(f, "error fetching float information: {}", e),
-        }
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum SaveItemsError {
+    #[error("bad/missing pre-shared key")]
     BadKey,
-    HydratingItem(HydrationError),
+    #[error("error hydrating case item: {0}")]
+    HydratingItem(#[from] HydrationError),
+    #[error("error persisting item: {0}")]
     SavingItem(StoreError),
+    #[error("error publishing new item event: {0}")]
     PublishingItem(StoreError),
-    Transport(hyper::Error),
-}
-
-impl From<hyper::Error> for SaveItemsError {
-    fn from(e: hyper::Error) -> Self {
-        Self::Transport(e)
-    }
-}
-
-impl From<HydrationError> for SaveItemsError {
-    fn from(e: HydrationError) -> Self {
-        Self::HydratingItem(e)
-    }
+    #[error("error communicating with client: {0}")]
+    Transport(#[from] hyper::Error),
 }
 
 impl From<CsgoFloatFetchError> for SaveItemsError {
@@ -81,41 +53,14 @@ impl From<CsgoFloatFetchError> for SaveItemsError {
     }
 }
 
-impl Display for SaveItemsError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::BadKey => write!(f, "bad/missing pre-shared key"),
-            Self::HydratingItem(e) => write!(f, "error hydrating case item: {}", e),
-            Self::SavingItem(e) => write!(f, "error persisting item: {}", e),
-            Self::PublishingItem(e) => write!(f, "error publishing new item event: {}", e),
-            Self::Transport(e) => write!(f, "error communicating with client: {}", e),
-        }
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum GetStateError {
-    HydratingItem(HydrationError),
-    FetchingItems(StoreError),
-    SerializingItems(serde_json::Error),
-}
-
-impl From<serde_json::Error> for GetStateError {
-    fn from(e: serde_json::Error) -> Self {
-        GetStateError::SerializingItems(e)
-    }
-}
-
-impl From<HydrationError> for GetStateError {
-    fn from(e: HydrationError) -> Self {
-        Self::HydratingItem(e)
-    }
-}
-
-impl From<StoreError> for GetStateError {
-    fn from(e: StoreError) -> Self {
-        Self::FetchingItems(e)
-    }
+    #[error("error hydrating items: {0}")]
+    HydratingItem(#[from] HydrationError),
+    #[error("error getting items from store: {0}")]
+    FetchingItems(#[from] StoreError),
+    #[error("error serialising items: {0}")]
+    SerializingItems(#[from] serde_json::Error),
 }
 
 impl From<CsgoFloatFetchError> for GetStateError {
@@ -124,30 +69,9 @@ impl From<CsgoFloatFetchError> for GetStateError {
     }
 }
 
-impl Display for GetStateError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            GetStateError::HydratingItem(e) => write!(f, "error hydrating items: {}", e),
-            GetStateError::FetchingItems(e) => write!(f, "error getting items from store: {}", e),
-            GetStateError::SerializingItems(e) => write!(f, "error serialising items: {}", e),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct StreamError(StoreError);
-
-impl From<StoreError> for StreamError {
-    fn from(e: StoreError) -> Self {
-        StreamError(e)
-    }
-}
-
-impl Display for StreamError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "error getting data stream: {}", self.0)
-    }
-}
+#[derive(Debug, Error)]
+#[error("error getting data stream: {0}")]
+pub struct StreamError(#[from] StoreError);
 
 pub struct Handler {
     store: Store,
@@ -354,21 +278,14 @@ pub async fn handle_websocket(
     Ok(resp)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 enum WebsocketServingError {
+    #[error("error upgrading: {0}")]
     Upgrading(tungstenite::Error),
+    #[error("error receiving message: {0}")]
     Receiving(tungstenite::Error),
+    #[error("error sending message: {0}")]
     Sending(tungstenite::Error),
-}
-
-impl Display for WebsocketServingError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Upgrading(e) => write!(f, "error upgrading: {}", e),
-            Self::Receiving(e) => write!(f, "error receiving message: {}", e),
-            Self::Sending(e) => write!(f, "error sending message: {}", e),
-        }
-    }
 }
 
 async fn spawn_handle_websocket<S: Stream<Item = Unlock> + Unpin>(stream: S, ws: HyperWebsocket) {

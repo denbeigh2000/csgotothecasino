@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::fmt::{self, Display};
 
 use chrono::{DateTime, Utc};
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
@@ -9,6 +8,7 @@ use reqwest::{Client, Request, StatusCode};
 use scraper::Html;
 use serde::{Deserialize, Serialize};
 use serde_aux::field_attributes::deserialize_number_from_string;
+use thiserror::Error;
 
 use crate::errors::{
     AuthenticationCheckError, FetchItemsError, FetchNewUnpreparedItemsError, LocalPrepareError,
@@ -51,24 +51,12 @@ pub struct UnhydratedUnlock {
     pub name: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum CredentialParseError {
+    #[error("could not parse session id, ensure you are passing a valid sessionid parameter")]
     NoSessionId,
+    #[error("given string does not resemble a cookie")]
     DoesNotResembleCookie,
-}
-
-impl Display for CredentialParseError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            CredentialParseError::NoSessionId => {
-                writeln!(f, "could not parse session id.")?;
-                write!(f, "ensure you are passing a `sessionid` parameter")
-            }
-            CredentialParseError::DoesNotResembleCookie => {
-                write!(f, "given string does not resemble a cookie")
-            }
-        }
-    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

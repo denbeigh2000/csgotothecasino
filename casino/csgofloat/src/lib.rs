@@ -1,6 +1,4 @@
-use core::fmt;
 use std::collections::HashMap;
-use std::fmt::Display;
 use std::sync::Arc;
 
 use bb8_redis::bb8::Pool;
@@ -9,7 +7,7 @@ use bb8_redis::RedisConnectionManager;
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
 use reqwest::{Body, Client, StatusCode};
 use serde::{Deserialize, Serialize};
-use serde_repr::Deserialize_repr;
+use thiserror::Error;
 
 use cache::Cache;
 
@@ -57,102 +55,45 @@ pub struct ItemDescription {
     full_item_name: String,
 }
 
-#[derive(Debug)]
-pub struct CsgoFloatError {
-    code: CsgoFloatErrorCode,
-}
-
-impl Display for CsgoFloatError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "CSGOFloat request failed: {}", self.code)
-    }
-}
-
-#[derive(Deserialize_repr, Debug)]
+#[derive(Debug, Error)]
 #[repr(u8)]
-pub enum CsgoFloatErrorCode {
+pub enum CsgoFloatError {
+    #[error("Improper parameter structure")]
     ImproperParameterStructure = 1,
+    #[error("Invalid Inspect Link Structure")]
     InvalidInspectLinkStructure = 2,
+    #[error("You have too many pending requests open at once")]
     TooManyPendingRequests = 3,
+    #[error("Valve's servers didn't reply in time")]
     ValveServerTimeout = 4,
+    #[error("Valve's servers appear to be offline, please try again later")]
     ValveOffline = 5,
+    #[error("Something went wrong on our end, please try again")]
     CsgoFloatInternalError = 6,
+    #[error("Something went wrong on our end, please try again")]
     ImproperBodyFormat = 7,
+    #[error("Bad Secret")]
     BadSecret = 8,
 }
 
-impl Display for CsgoFloatErrorCode {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::ImproperParameterStructure => write!(f, "Improper parameter structure"),
-            Self::InvalidInspectLinkStructure => write!(f, "Invalid Inspect Link Structure"),
-            Self::TooManyPendingRequests => {
-                write!(f, "You have too many pending requests open at once")
-            }
-            Self::ValveServerTimeout => write!(f, "Valve's servers didn't reply in time"),
-            Self::ValveOffline => write!(
-                f,
-                "Valve's servers appear to be offline, please try again later"
-            ),
-            Self::CsgoFloatInternalError => {
-                write!(f, "Something went wrong on our end, please try again")
-            }
-            Self::ImproperBodyFormat => write!(f, "Improper body format"),
-            Self::BadSecret => write!(f, "Bad Secret"),
-        }
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum CsgoFloatFetchError {
-    CsgoFloat(CsgoFloatError),
-    Transport(reqwest::Error),
-    Deserializing(serde_json::Error),
-    SteamURLFormat(SteamURLParseError),
+    #[error("error from api: {0}")]
+    CsgoFloat(#[from] CsgoFloatError),
+    #[error("http error: {0}")]
+    Transport(#[from] reqwest::Error),
+    #[error("deserialisation error: {0}")]
+    Deserializing(#[from] serde_json::Error),
+    #[error("error parsing steam url: {0}")]
+    SteamURLFormat(#[from] SteamURLParseError),
 }
 
-impl Display for CsgoFloatFetchError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::CsgoFloat(e) => write!(f, "error from api: {}", e),
-            Self::Transport(e) => write!(f, "http error: {}", e),
-            Self::Deserializing(e) => write!(f, "deserialisation error: {}", e),
-            Self::SteamURLFormat(e) => write!(f, "error parsing steam url: {}", e),
-        }
-    }
-}
-
-impl From<SteamURLParseError> for CsgoFloatFetchError {
-    fn from(e: SteamURLParseError) -> Self {
-        Self::SteamURLFormat(e)
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum SteamURLParseError {
+    #[error("url missing \"A\" marker")]
     MissingAssetMarker,
+    #[error("url missing \"D\" marker")]
     MissingDMarker,
-}
-
-impl Display for SteamURLParseError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::MissingAssetMarker => write!(f, "url missing \"A\" marker"),
-            Self::MissingDMarker => write!(f, "url missing \"D\" marker"),
-        }
-    }
-}
-
-impl From<reqwest::Error> for CsgoFloatFetchError {
-    fn from(e: reqwest::Error) -> Self {
-        Self::Transport(e)
-    }
-}
-
-impl From<serde_json::Error> for CsgoFloatFetchError {
-    fn from(e: serde_json::Error) -> Self {
-        Self::Deserializing(e)
-    }
 }
 
 pub async fn get_by_market_url(
@@ -236,20 +177,9 @@ pub async fn get_bulk_by_market_url(
     Ok(items_by_url)
 }
 
-#[derive(Debug)]
-pub struct CsgoFloatClientCreateError(RedisError);
-
-impl From<RedisError> for CsgoFloatClientCreateError {
-    fn from(e: RedisError) -> Self {
-        Self(e)
-    }
-}
-
-impl Display for CsgoFloatClientCreateError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "error creating csgofloat client cache: {}", self.0)
-    }
-}
+#[derive(Debug, Error)]
+#[error("error creating csgofloat client cache: {0}")]
+pub struct CsgoFloatClientCreateError(#[from] RedisError);
 
 pub struct CsgoFloatClient {
     key: String,

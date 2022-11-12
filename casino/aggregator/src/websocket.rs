@@ -2,25 +2,16 @@ use futures_util::SinkExt;
 use hyper_tungstenite::hyper::upgrade::Upgraded;
 use hyper_tungstenite::tungstenite::{self, Message};
 use hyper_tungstenite::WebSocketStream;
+use thiserror::Error;
 
 use steam::Unlock;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum MessageSendError {
-    Serde(serde_json::Error),
-    Transport(tungstenite::Error),
-}
-
-impl From<serde_json::Error> for MessageSendError {
-    fn from(e: serde_json::Error) -> Self {
-        Self::Serde(e)
-    }
-}
-
-impl From<tungstenite::Error> for MessageSendError {
-    fn from(e: tungstenite::Error) -> Self {
-        Self::Transport(e)
-    }
+    #[error("ser/deserialisation error: {0}")]
+    Serde(#[from] serde_json::Error),
+    #[error("error sending message: {0}")]
+    Transport(#[from] tungstenite::Error),
 }
 
 pub async fn handle_emit(

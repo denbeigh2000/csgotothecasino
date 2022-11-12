@@ -1,177 +1,64 @@
-use std::fmt::{self, Display};
-
 use reqwest::StatusCode;
+use thiserror::Error;
 
 use super::parsing::{AuthenticationParseError, ParseFailure};
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum FetchNewUnpreparedItemsError {
-    Transport(reqwest::Error),
+    #[error("HTTP error: {0}")]
+    Transport(#[from] reqwest::Error),
+    #[error("Authentication failure")]
     Authentication,
+    #[error("unhandled status code: {0}")]
     UnhandledStatusCode(StatusCode),
+    #[error("failed to parse any history from steam site")]
     NoHistoryFound,
-    PageParse(ParseFailure),
-    AuthenticationParse(AuthenticationParseError),
+    #[error("failed to parse inventory history: {0}")]
+    PageParse(#[from] ParseFailure),
+    #[error("error finding login state: {0}")]
+    AuthenticationParse(#[from] AuthenticationParseError),
+    #[error("not logged in")]
     NotAuthenticated,
 }
 
-impl From<ParseFailure> for FetchNewUnpreparedItemsError {
-    fn from(e: ParseFailure) -> Self {
-        Self::PageParse(e)
-    }
-}
-
-impl From<AuthenticationParseError> for FetchNewUnpreparedItemsError {
-    fn from(e: AuthenticationParseError) -> Self {
-        Self::AuthenticationParse(e)
-    }
-}
-
-impl std::fmt::Display for FetchNewUnpreparedItemsError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Transport(e) => write!(f, "HTTP error: {}", e),
-            Self::Authentication => write!(f, "Authentication failure"),
-            Self::UnhandledStatusCode(code) => write!(f, "unhandled status code: {}", code),
-            Self::NoHistoryFound => write!(f, "failed to parse any history from steam site"),
-            Self::PageParse(e) => write!(f, "failed to parse inventory history: {}", e),
-            Self::AuthenticationParse(e) => write!(f, "error finding login state: {}", e),
-            Self::NotAuthenticated => write!(f, "not logged in"),
-        }
-    }
-}
-
-impl From<reqwest::Error> for FetchNewUnpreparedItemsError {
-    fn from(e: reqwest::Error) -> Self {
-        Self::Transport(e)
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum FetchItemsError {
-    FetchUnpreparedItems(FetchNewUnpreparedItemsError),
-    PreparingItems(PrepareItemsError),
+    #[error("error fetching raw items: {0}")]
+    FetchUnpreparedItems(#[from] FetchNewUnpreparedItemsError),
+    #[error("error preparing items from inventory data: {0}")]
+    PreparingItems(#[from] PrepareItemsError),
 }
 
-impl From<FetchNewUnpreparedItemsError> for FetchItemsError {
-    fn from(e: FetchNewUnpreparedItemsError) -> Self {
-        Self::FetchUnpreparedItems(e)
-    }
-}
-
-impl From<PrepareItemsError> for FetchItemsError {
-    fn from(e: PrepareItemsError) -> Self {
-        Self::PreparingItems(e)
-    }
-}
-
-impl Display for FetchItemsError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::FetchUnpreparedItems(e) => write!(f, "error fetching raw items: {}", e),
-            Self::PreparingItems(e) => {
-                write!(f, "error preparing items from inventory data: {}", e)
-            }
-        }
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum PrepareItemsError {
-    Transport(reqwest::Error),
-    Deserializing(serde_json::Error),
+    #[error("http error fetching inventory: {0}")]
+    Transport(#[from] reqwest::Error),
+    #[error("error deserialising inventory: {0}")]
+    Deserializing(#[from] serde_json::Error),
 }
 
-impl From<reqwest::Error> for PrepareItemsError {
-    fn from(e: reqwest::Error) -> Self {
-        Self::Transport(e)
-    }
-}
-
-impl From<serde_json::Error> for PrepareItemsError {
-    fn from(e: serde_json::Error) -> Self {
-        Self::Deserializing(e)
-    }
-}
-
-impl Display for PrepareItemsError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Transport(e) => write!(f, "http error fetching inventory: {}", e),
-            Self::Deserializing(e) => write!(f, "error deserialising inventory: {}", e),
-        }
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum MarketPriceFetchError {
-    Transport(reqwest::Error),
-    Deserializing(serde_json::Error),
+    #[error("http error: {0}")]
+    Transport(#[from] reqwest::Error),
+    #[error("error deserialising market prices: {0}")]
+    Deserializing(#[from] serde_json::Error),
 }
 
-impl Display for MarketPriceFetchError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Transport(e) => write!(f, "http error: {}", e),
-            Self::Deserializing(e) => write!(f, "error deserialising market prices: {}", e),
-        }
-    }
-}
-
-impl From<reqwest::Error> for MarketPriceFetchError {
-    fn from(e: reqwest::Error) -> Self {
-        Self::Transport(e)
-    }
-}
-
-impl From<serde_json::Error> for MarketPriceFetchError {
-    fn from(e: serde_json::Error) -> Self {
-        Self::Deserializing(e)
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum AuthenticationCheckError {
-    Transport(reqwest::Error),
-    Parse(AuthenticationParseError),
+    #[error("http error: {0}")]
+    Transport(#[from] reqwest::Error),
+    #[error("error parsing authentication data: {0}")]
+    Parse(#[from] AuthenticationParseError),
 }
 
-impl Display for AuthenticationCheckError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Transport(e) => write!(f, "http error: {}", e),
-            Self::Parse(e) => write!(f, "error parsing authentication data: {}", e),
-        }
-    }
-}
-
-impl From<reqwest::Error> for AuthenticationCheckError {
-    fn from(e: reqwest::Error) -> Self {
-        Self::Transport(e)
-    }
-}
-
-impl From<AuthenticationParseError> for AuthenticationCheckError {
-    fn from(e: AuthenticationParseError) -> Self {
-        Self::Parse(e)
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum LocalPrepareError {
+    #[error("could not find item description in inventory")]
     NoDescription,
+    #[error("could not find item asset info in inventory")]
     NoAsset,
+    #[error("could not find in-game inspect link")]
     NoInspectLink,
-}
-
-impl Display for LocalPrepareError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let desc = match self {
-            Self::NoDescription => "could not find item description in inventory",
-            Self::NoAsset => "could not find item asset info in inventory",
-            Self::NoInspectLink => "could not find in-game inspect link",
-        };
-
-        write!(f, "error preparing steam unlock: {}", desc)
-    }
 }
