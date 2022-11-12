@@ -1,5 +1,6 @@
 const express = require("express");
 const open = require("open");
+const process = require("process");
 const morgan = require("morgan");
 const { createProxyMiddleware } = require("http-proxy-middleware");
 
@@ -7,7 +8,7 @@ const { createProxyMiddleware } = require("http-proxy-middleware");
 const app = express();
 
 // Use environment
-const ENV = "prod";
+const ENV = process.env.ENV || "prod";
 
 // Configuration
 const PORT = 7007;
