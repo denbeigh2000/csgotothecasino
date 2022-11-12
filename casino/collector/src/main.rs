@@ -5,7 +5,8 @@ use std::time::Duration;
 use collector::config::{Config, ConfigLoadError};
 use collector::{Collector, CollectorError, UrlParseError};
 use chrono::Utc;
-use clap::{App, Arg};
+use clap::Parser;
+use reqwest::Url;
 use steam::errors::AuthenticationCheckError;
 use steam::{CredentialParseError, Id, IdUrlParseError, SteamClient, SteamCredentials};
 use thiserror::Error;
@@ -20,73 +21,41 @@ async fn main() {
     }
 }
 
+#[derive(Parser)]
+struct Args {
+    /// Interval to poll Steam API
+    #[arg(short, long, env, default_value = "60s")]
+    poll_interval: humantime::Duration,
+    /// URL to upload entries to
+    #[arg(short, long, env, default_value = "https://casino.denb.ee/api/upload")]
+    collection_url: Url,
+    /// Path to credentials storage file
+    #[arg(short = 'x', long, env, default_value = "./.creds.json")]
+    credentials_path: PathBuf,
+    /// Path to configuration file
+    config_path: PathBuf,
+    /// Level to log at
+    #[arg(short, long, env, default_value = "info")]
+    log_level: log::LevelFilter,
+}
+
 async fn main_result() -> Result<(), MainError> {
-    let args = App::new("collector")
-        .arg(logging::build_arg())
-        .arg(
-            Arg::with_name("interval")
-                .short("-i")
-                .long("--interval-secs")
-                .env("POLL_INTERVAL")
-                .help("Interval to poll Steam API in seconds")
-                .takes_value(true)
-                .default_value("10"),
-        )
-        .arg(
-            Arg::with_name("collection_url")
-                .short("-c")
-                .long("--collection-url")
-                .env("COLLECTION_URL")
-                .help("URL to upload entries to")
-                .takes_value(true)
-                .default_value("https://casino.denb.ee/api/upload"),
-        )
-        .arg(
-            Arg::with_name("credentials_path")
-                .short("-x")
-                .long("--credentials-path")
-                .env("CREDENTIALS_PATH")
-                .help("Path to credentials storage file")
-                .takes_value(true)
-                .default_value("./.creds.json"),
-        )
-        .arg(
-            Arg::with_name("config_path")
-                .index(1)
-                .env("CONFIG_PATH")
-                .help("Path to configuration file")
-                .takes_value(true)
-                .default_value("./config.yaml"),
-        )
-        .get_matches();
+    let args = Args::parse();
 
-    let log_level = args.value_of(logging::LEVEL_FLAG_NAME).unwrap();
-    logging::init_str(log_level);
+    logging::init(args.log_level);
 
-    let cfg_path = args.value_of("config_path").ok_or(MainError::NoConfigValue)?;
-    let cfg = Config::try_from_path(cfg_path).await?;
+    let cfg = Config::try_from_path(args.config_path).await?;
 
     let id = Id::try_from_url(&cfg.steam_profile_url).await?;
 
-    // NOTE: PathBuf's implementation of FromStr lists its' Err as Infallible
-    let creds_path: PathBuf = args.value_of("credentials_path").unwrap().parse().unwrap();
-    let client = prepare_client(id, AsRef::as_ref(&creds_path)).await?;
-
-    let interval_secs = args
-        .value_of("interval")
-        .ok_or(MainError::NoIntervalValue)?
-        .parse()
-        .map_err(MainError::InvalidIntervalValue)?;
-    let interval = Duration::from_secs(interval_secs);
-
-    let collection_url = args.value_of("collection_url").unwrap();
+    let client = prepare_client(id, AsRef::as_ref(&args.credentials_path)).await?;
 
     let now = Utc::now();
     let delta = chrono::Duration::from_std(Duration::from_secs(60 * 10)).unwrap();
     let start = now - delta;
     let st = Some(start);
 
-    Collector::new(collection_url, client, cfg.pre_shared_key, interval, st)
+    Collector::new(args.collection_url, client, cfg.pre_shared_key, *args.poll_interval, st)
         .await?
         .run()
         .await?;
@@ -104,10 +73,6 @@ enum MainError {
     GatheringSteamIdInfo(#[from] IdUrlParseError),
     #[error("error parsing collection url: {0}")]
     CollectionUrlParse(#[from] UrlParseError),
-    #[error("no value found for config path")]
-    NoConfigValue,
-    #[error("no value found for interval")]
-    NoIntervalValue,
     #[error("error parsing polling interval: {0}")]
     InvalidIntervalValue(#[from] ParseIntError),
     #[error("error running main loop: {0}")]
