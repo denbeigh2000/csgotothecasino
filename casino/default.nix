@@ -1,7 +1,27 @@
-{ callPackage }:
+{ buildPackage
+, writeScriptBin
+, stdenv
+, pkg-config
+, openssl
+, bash
+}:
 
+let
+  version = "0.0.1";
+  group = buildPackage {
+    pname = "casino";
+    inherit version;
+
+    src = ./.;
+    root = ./.;
+
+    nativeBuildInputs = [ pkg-config openssl ];
+  };
+
+  mkBinary = name: writeScriptBin name "${group}/bin/${name} $@";
+in
 {
-  aggregator = callPackage ./aggregator { };
-  # bootstrap = callPackage ./bootstrap { };
-  # collector = callPackage ./collector { };
+  aggregator = mkBinary "aggregator";
+  bootstrap = mkBinary "bootstrap";
+  collector = mkBinary "collector";
 }

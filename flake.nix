@@ -11,29 +11,39 @@
     };
     naersk = {
       url = "github:nix-community/naersk";
-      inputs = {
-        nixpkgs.follows = "nixpkgs";
-        flake-utils.follows = "flake-utils";
-      };
+      inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
   outputs = { self, nixpkgs, flake-utils, rust-overlay, naersk }:
-    flake-utils.lib.eachDefaultSystem (system:
+    rec {
+      overlays.default = import ./tools { inherit naersk; };
+      nixosModules = {
+        casino = import ./casino/module.nix {
+          inherit rust-overlay;
+          overlay = overlays.default;
+        };
+        viz = import ./viz/module.nix {
+          inherit rust-overlay;
+          overlay = overlays.default;
+        };
+      };
+    } // flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs {
           inherit system;
           overlays = [
             rust-overlay.overlays.default
-            naersk.overlays.default
+            naersk.overlay
+            self.overlays.default
           ];
         };
-
-        casino = pkgs.callPackage ./casino { };
       in
       {
         packages = rec {
-          inherit (casino) aggregator bootstrap collector;
+          inherit (pkgs.casino) aggregator bootstrap collector;
+          inherit (pkgs) viz;
+
           default = pkgs.symlinkJoin {
             name = "casino";
             paths = [ aggregator bootstrap collector ];
