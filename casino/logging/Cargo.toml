@@ -6,6 +6,5 @@ edition = "2021"
 [lib]
 
 [dependencies]
-clap = "2.34"
 log = "0.4"
-simplelog = "0.11"
+simplelog = "0.12"
