@@ -1,1 +1,4 @@
 node_modules/
+
+# Nix symlinks to node_modules in the nix store, which are considered files
+node_modules
