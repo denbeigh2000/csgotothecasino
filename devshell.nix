@@ -43,6 +43,12 @@ let
 
   setup-yarn = runInSubdir "setup-yarn" "viz" ''
     node_modules=${node-pkg}/node_modules
+
+    if [[ -d node_modules ]]
+    then
+      mv node_modules node_modules.old
+    fi
+
     ${yarn2nix-moretea.linkNodeModulesHook}
   '';
 
@@ -72,13 +78,13 @@ devshell.mkShell {
       name = "serve-web";
       help = "Serve front-end files";
       category = "frontend";
-      command = "${serve-web}/bin/serve-web";
+      command = "${serve-web}/bin/serve-web $@";
     }
     {
       name = "setup-yarn";
       help = "Sets up frontend dev dependencies (clobbers existing node_modules)";
       category = "frontend";
-      command = "${setup-yarn}/bin/setup-yarn";
+      command = "${setup-yarn}/bin/setup-yarn $@";
     }
   ];
   env = [
