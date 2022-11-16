@@ -199,6 +199,9 @@ impl SteamClient {
         last_id: Option<&str>,
     ) -> Result<Vec<UnhydratedUnlock>, FetchItemsError> {
         let unhydrated = self.fetch_new_unprepared_items(since, last_id).await?;
+        if unhydrated.is_empty() {
+            return Ok(vec![]);
+        }
         let prepared = self
             .prepare_unlocks(unhydrated, self.username.clone())
             .await?;
