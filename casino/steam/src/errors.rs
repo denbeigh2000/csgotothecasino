@@ -31,12 +31,16 @@ pub enum FetchNewUnpreparedItemsError {
     NotAuthenticated,
 }
 
+// TODO: Give this a better name/description
 #[derive(Debug, Error)]
 pub enum FetchItemsError {
     #[error("error fetching inventory: {0}")]
     FetchInventory(#[from] FetchInventoryError),
     #[error("error fetching raw items: {0}")]
     FetchUnpreparedItems(#[from] FetchNewUnpreparedItemsError),
+    // TODO: Give this a better name/description
+    #[error("error fetching inventory history data: {0}")]
+    PreparingItems(#[from] PrepareItemsError),
 }
 
 #[derive(Debug, Error)]
@@ -45,8 +49,6 @@ pub enum PrepareItemsError {
     Transport(#[from] reqwest::Error),
     #[error("error deserialising inventory: {0}")]
     Deserializing(#[from] serde_json::Error),
-    #[error("error fetching inventory data: {0}")]
-    PreparingItems(#[from] FetchItemsError),
 }
 
 #[derive(Debug, Error)]

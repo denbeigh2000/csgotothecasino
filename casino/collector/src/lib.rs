@@ -73,7 +73,7 @@ impl Collector {
         let last_item = self.last_known_item.as_deref();
         let mut new_items = self
             .steam_client
-            .fetch_new_items(since, last_item)
+            .fetch_history_for_new_items(since, last_item)
             .await?;
 
         if new_items.is_empty() {

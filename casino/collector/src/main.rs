@@ -50,6 +50,8 @@ async fn main_result() -> Result<(), MainError> {
 
     let client = prepare_client(id, AsRef::as_ref(&args.credentials_path)).await?;
 
+    // TODO: Can we get the current time/time zone from Steam, so that we can
+    // avoid deltas with local time and store timezone?
     let now = Utc::now();
     let delta = chrono::Duration::from_std(Duration::from_secs(60 * 10)).unwrap();
     let start = now - delta;

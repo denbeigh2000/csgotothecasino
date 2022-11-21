@@ -164,23 +164,38 @@ impl SteamClient {
             .unwrap()
     }
 
-    pub async fn fetch_new_items(
+    pub async fn fetch_history_for_new_items(
         &self,
         since: Option<&DateTime<Utc>>,
-        last_id: Option<&InventoryId>,
+        last_item: Option<&InventoryId>,
     ) -> Result<Vec<UnhydratedUnlock>, FetchItemsError> {
         // TODO: Need to check what exactly start_assetid does (but we should
         // have it handy by our stored InventoryId if needed)
         // TODO: This needs to fetch inventory first to avoid excceding rate limits.
         // Re-use inventory data when calling prepare_unlocks
         let inv = self.fetch_inventory().await?;
-        let last_items = inv.assets.last();
-        let unhydrated = self.fetch_new_unprepared_items(since, last_id).await?;
+        match (inv.descriptions.first(), last_item) {
+            // Return early if we have made a successful call and it shows we
+            // have no new items in our inventory.
+            (Some(new), Some(old)) => {
+                let new_inv_id = InventoryId::from(new);
+                if &new_inv_id == old {
+                    // No new items to process
+                    return Ok(vec![]);
+                }
+            }
+            // Return early if steam tells us there are no items in our inventory.
+            (None, _) => return Ok(vec![]),
+            _ => (),
+        };
+
+        // TODO: Give this a better name
+        let unhydrated = self.fetch_new_unprepared_items(since, last_item).await?;
         if unhydrated.is_empty() {
             return Ok(vec![]);
         }
         let prepared = self
-            .prepare_unlocks(unhydrated, self.username.clone())
+            .prepare_unlocks(inv, unhydrated, self.username.clone())
             .await?;
 
         Ok(prepared)
@@ -202,10 +217,11 @@ impl SteamClient {
         Ok(authenticated)
     }
 
+    // TODO: This needs to be adapted to use Inventory here instead of since/last_id
     async fn fetch_new_unprepared_items(
         &self,
         since: Option<&DateTime<Utc>>,
-        last_id: Option<&str>,
+        last_item: Option<&InventoryId>,
     ) -> Result<Vec<RawUnlock>, FetchNewUnpreparedItemsError> {
         let resp = self.http_client.execute(self.inv_history_req()).await?;
 
@@ -230,7 +246,9 @@ impl SteamClient {
         let mut unlocks: Vec<RawUnlock> = Vec::new();
 
         for trade in trades {
-            match parse_raw_unlock(trade, since, last_id)? {
+            // TODO: This now needs to use the data from Inventory to determine
+            // age
+            match parse_raw_unlock(trade, since, last_item)? {
                 ParseSuccess::ValidItem(v) => unlocks.push(v),
                 ParseSuccess::TooOld => return Ok(unlocks),
                 ParseSuccess::WrongTransactionType => {
@@ -259,23 +277,32 @@ impl SteamClient {
             .text()
             .await?;
 
-        serde_json::from_str(&resp)?
+        let mut inv: Inventory = serde_json::from_str(&resp).map_err(FetchInventoryError::from)?;
+
+        // NOTE: Steam returns these in oldest-first order, reverse them so
+        // they're easier to work with.
+        inv.assets.reverse();
+        inv.descriptions.reverse();
+        Ok(inv)
     }
 
     async fn prepare_unlocks(
         &self,
+        inv: Inventory,
         items: Vec<RawUnlock>,
         name: String,
     ) -> Result<Vec<UnhydratedUnlock>, PrepareItemsError> {
-        let inv = self.fetch_inventory().await?;
         let data_map: HashMap<InventoryId, InventoryDescription> = inv
             .descriptions
             .into_iter()
-            .map(|i| (&i.into(), i))
+            .map(|i| (InventoryId::from(&i), i))
             .collect();
 
-        let asset_map: HashMap<InventoryId, Asset> =
-            inv.assets.into_iter().map(|i| (&i.into(), i)).collect();
+        let asset_map: HashMap<InventoryId, Asset> = inv
+            .assets
+            .into_iter()
+            .map(|i| (InventoryId::from(&i), i))
+            .collect();
 
         // TODO: Write a comment explaining why this is here
         let (results, errs): (Vec<_>, Vec<_>) = items

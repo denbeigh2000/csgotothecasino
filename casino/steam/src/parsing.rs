@@ -259,10 +259,11 @@ pub fn is_authenticated(page: &Html) -> Result<bool, AuthenticationParseError> {
     Err(AuthenticationParseError::MissingLoginOrUserInfo)
 }
 
+// TODO: This probably shouldn't concern itself with parsing _and_ filtering.
 pub fn parse_raw_unlock(
     trade: ElementRef<'_>,
     since: Option<&DateTime<Utc>>,
-    last_seen_id: Option<&str>,
+    last_seen_inventory_id: Option<&InventoryId>,
 ) -> ParseResult {
     let desc = trade
         .select(&DESCRIPTION_SELECTOR)
@@ -274,6 +275,7 @@ pub fn parse_raw_unlock(
         .ok_or(ParseFailure::MissingDescriptionText)?
         .trim();
 
+    // NOTE: We could easily(?) change this to handle trade-ups, too.
     if desc_text != "Unlocked a container" {
         // This transaction was not a container unboxing
         return Ok(ParseSuccess::WrongTransactionType);
@@ -299,6 +301,7 @@ pub fn parse_raw_unlock(
         "%b %e, %Y %l:%M%P",
     )
     .map_err(|_| ParseFailure::DateFormattingChanged)?;
+    // TODO: Need to see if we can get "real" timezone from Steam.
     let datetime = Local
         .from_local_datetime(&datetime)
         .unwrap()
@@ -324,6 +327,8 @@ pub fn parse_raw_unlock(
         .next()
         .ok_or(ParseFailure::MissingGainedItem)?;
 
+    let inv_id = inv_id_from_node(gained_item);
+
     let history_id_attr = case_node.value().id().unwrap();
     let history_id = HISTORY_ID_REGEX
         .captures(history_id_attr)
@@ -332,7 +337,8 @@ pub fn parse_raw_unlock(
         .ok_or(ParseFailure::TradeIdFormattingChanged)?
         .as_str();
 
-    if last_seen_id.map(|l| l == history_id).unwrap_or(false) {
+    // TODO: Want to check to see if asset_id is monotonically increasing
+    if last_seen_inventory_id.map(|l| l == &inv_id).unwrap_or(false) {
         return Ok(ParseSuccess::TooOld);
     }
     let key = key_node.map(item_from_node).transpose()?;
@@ -342,7 +348,7 @@ pub fn parse_raw_unlock(
 
         case: item_from_node(case_node)?,
         key,
-        item: inv_id_from_node(gained_item),
+        item: inv_id,
 
         at: datetime,
     }))
