@@ -59,13 +59,10 @@ async fn main() {
 }
 
 async fn inner_main() -> Result<(), BootstrapError> {
-    // TODO
     let args = Args::try_parse()?;
 
-    // let log_level: String = args.value_of(logging::LEVEL_FLAG_NAME).unwrap().to_string();
     logging::init(args.log_level);
 
-    // let config_path: PathBuf = args.value_of("config_path").unwrap().parse().unwrap();
     if !args.config_path.exists() {
         log::warn!(
             "Config file {} doesn't exist",

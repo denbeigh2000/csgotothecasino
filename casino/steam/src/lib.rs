@@ -37,8 +37,6 @@ lazy_static::lazy_static! {
 
 type LocalPrepareResult = Result<UnhydratedUnlock, LocalPrepareError>;
 
-// TODO: This needs to also contain the InventoryId of the item for local
-// deduplication
 /// A minimal inventory transaction, suitable for sending to our backend.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UnhydratedUnlock {
@@ -174,8 +172,6 @@ impl SteamClient {
     ) -> Result<Vec<UnhydratedUnlock>, FetchItemsError> {
         // TODO: Need to check what exactly start_assetid does (but we should
         // have it handy by our stored InventoryId if needed)
-        // TODO: This needs to fetch inventory first to avoid excceding rate limits.
-        // Re-use inventory data when calling prepare_unlocks
         let inv = self.fetch_inventory().await?;
         match (inv.descriptions.first(), last_item) {
             // Return early if we have made a successful call and it shows we
@@ -220,7 +216,6 @@ impl SteamClient {
         Ok(authenticated)
     }
 
-    // TODO: This needs to be adapted to use Inventory here instead of since/last_id
     async fn fetch_new_unprepared_items(
         &self,
         since: Option<&DateTime<Utc>>,
@@ -249,8 +244,6 @@ impl SteamClient {
         let mut unlocks: Vec<RawUnlock> = Vec::new();
 
         for trade in trades {
-            // TODO: This now needs to use the data from Inventory to determine
-            // age
             match parse_raw_unlock(trade, since, last_item)? {
                 ParseSuccess::ValidItem(v) => unlocks.push(v),
                 ParseSuccess::TooOld => return Ok(unlocks),
@@ -268,10 +261,7 @@ impl SteamClient {
         Ok(unlocks)
     }
 
-    // TODO: Account for failure modes of fetching Inventory (should be able to
-    // adapt from hydration functions)
     async fn fetch_inventory(&self) -> Result<Inventory, FetchInventoryError> {
-        // TODO: needs to handle unauthenticated requests as a failure mode
         let resp = self
             .http_client
             .execute(self.inv_req())
@@ -307,7 +297,13 @@ impl SteamClient {
             .map(|i| (InventoryId::from(&i), i))
             .collect();
 
-        // TODO: Write a comment explaining why this is here
+        // NOTE: This fairly ugly block of code exists because we need to
+        // combine results from both the user's inventory _and_ inventory
+        // history data to provide our full set of data to the backend, which
+        // are not guaranteed to be sorted in order.
+        // Moving this mapper to another function would also require us to pass
+        // in both data maps and the user's identifier, which feels like more
+        // trouble than it's worth.
         let (results, errs): (Vec<_>, Vec<_>) = items
             .into_iter()
             .map(|i| {
@@ -333,13 +329,15 @@ impl SteamClient {
                     .replacen("%assetid%", &item_asset.asset_id().to_string(), 1)
                     .replacen("%owner_steamid%", &self.id.user_id().to_string(), 1);
 
+                let inventory_id = i.item;
+                // TODO: Do we need this anymore?
                 let history_id = i.history_id;
                 let at = i.at;
                 let name = name.clone();
 
                 Ok(UnhydratedUnlock {
                     history_id,
-                    inventory_id: i.item,
+                    inventory_id,
 
                     key,
                     case,
