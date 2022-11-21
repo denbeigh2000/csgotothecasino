@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::convert::Infallible;
 
 use chrono::{DateTime, Utc};
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
@@ -15,9 +16,9 @@ use crate::errors::{
     PrepareItemsError,
 };
 pub use crate::id::{Id, IdUrlParseError};
+pub use crate::parsing::InventoryId, InventoryDescription;
 use crate::parsing::{
-    is_authenticated, parse_raw_unlock, InventoryId, ParseSuccess, RawUnlock, TrivialItem,
-    TRADE_SELECTOR,
+    is_authenticated, parse_raw_unlock, ParseSuccess, RawUnlock, TrivialItem, TRADE_SELECTOR,
 };
 
 pub mod errors;
@@ -124,45 +125,6 @@ pub struct Inventory {
     descriptions: Vec<InventoryDescription>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct InventoryDescription {
-    #[serde(deserialize_with = "deserialize_number_from_string")]
-    #[serde(rename(deserialize = "classid"))]
-    pub class_id: u64,
-    #[serde(deserialize_with = "deserialize_number_from_string")]
-    #[serde(rename(deserialize = "instanceid"))]
-    pub instance_id: u64,
-    pub icon_url: String,
-    #[serde(rename(deserialize = "market_hash_name"))]
-    pub name: String,
-    #[serde(rename = "type")]
-    pub variant: String,
-
-    pub actions: Option<Vec<Action>>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct Asset {
-    #[serde(deserialize_with = "deserialize_number_from_string")]
-    #[serde(rename(deserialize = "appid"))]
-    app_id: u32,
-    #[serde(deserialize_with = "deserialize_number_from_string")]
-    #[serde(rename(deserialize = "assetid"))]
-    asset_id: u64,
-    #[serde(deserialize_with = "deserialize_number_from_string")]
-    #[serde(rename(deserialize = "classid"))]
-    class_id: u64,
-    #[serde(deserialize_with = "deserialize_number_from_string")]
-    #[serde(rename(deserialize = "instanceid"))]
-    instance_id: u64,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct Action {
-    link: String,
-    name: String,
-}
-
 pub struct SteamClient {
     id: Id,
     http_client: Client,
@@ -185,6 +147,16 @@ impl SteamClient {
         }
     }
 
+    fn inv_req(&self) -> Request {
+        self.http_client
+            .get(self.id.inventory_url())
+            // NOTE: Desired to avoid exceeding rate limits (anon inventory
+            // requests are aggressively rate-limited)
+            .header("Cookie", &self.cookie_str)
+            .build()
+            .unwrap()
+    }
+
     fn inv_history_req(&self) -> Request {
         self.http_client
             .get(self.id.inventory_history_url())
@@ -196,8 +168,12 @@ impl SteamClient {
     pub async fn fetch_new_items(
         &self,
         since: Option<&DateTime<Utc>>,
-        last_id: Option<&str>,
+        last_id: Option<&InventoryId>,
     ) -> Result<Vec<UnhydratedUnlock>, FetchItemsError> {
+        // TODO: Need to check what exactly start_assetid does (but we should
+        // have it handy by our stored InventoryId if needed)
+        // TODO: This needs to fetch inventory first to avoid excceding rate limits.
+        // Re-use inventory data when calling prepare_unlocks
         let unhydrated = self.fetch_new_unprepared_items(since, last_id).await?;
         if unhydrated.is_empty() {
             return Ok(vec![]);
@@ -270,6 +246,12 @@ impl SteamClient {
         Ok(unlocks)
     }
 
+    // TODO: Account for failure modes of fetching Inventory (should be able to
+    // adapt from hydration functions)
+    async fn fetch_inventory(&self) -> Result<Inventory, Infallible> {
+        todo!()
+    }
+
     async fn prepare_unlocks(
         &self,
         items: Vec<RawUnlock>,
@@ -277,31 +259,15 @@ impl SteamClient {
     ) -> Result<Vec<UnhydratedUnlock>, PrepareItemsError> {
         let resp = self
             .http_client
-            .get(self.id.inventory_url())
-            .send()
+            .execute(self.inv_req())
             .await?
             .error_for_status()?
             .text()
             .await?;
 
         let inv: Inventory = serde_json::from_str(&resp)?;
-        let data_map: HashMap<InventoryId, InventoryDescription> = inv
-            .descriptions
-            .into_iter()
-            .fold(HashMap::new(), |mut acc, item| {
-                let id = InventoryId::new(item.class_id, item.instance_id);
-                acc.insert(id, item);
-                acc
-            });
-
-        let asset_map: HashMap<InventoryId, Asset> =
-            inv.assets
-                .into_iter()
-                .fold(HashMap::new(), |mut acc, item| {
-                    let id = InventoryId::new(item.class_id, item.instance_id);
-                    acc.insert(id, item);
-                    acc
-                });
+        let data_map: HashMap<InventoryId, InventoryDescription> = inv.descriptions.into_iter().collect();
+        let asset_map: HashMap<InventoryId, Asset> = inv.assets.into_iter().collect();
 
         let (results, errs): (Vec<_>, Vec<_>) = items
             .into_iter()

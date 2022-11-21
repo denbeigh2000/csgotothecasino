@@ -6,7 +6,7 @@ use reqwest::header::AUTHORIZATION;
 use tokio::time::interval;
 
 use steam::errors::FetchItemsError;
-use steam::{SteamClient, UnhydratedUnlock};
+use steam::{InventoryId, SteamClient, UnhydratedUnlock};
 use thiserror::Error;
 
 pub mod config;
@@ -23,7 +23,7 @@ pub struct Collector {
 
     poll_interval: Duration,
     last_unboxing: Option<DateTime<Utc>>,
-    last_parsed_history_id: Option<String>,
+    last_known_item: Option<InventoryId>,
 }
 
 impl Collector {
@@ -48,7 +48,7 @@ impl Collector {
 
             poll_interval,
             last_unboxing: start_time,
-            last_parsed_history_id: None,
+            last_known_item: None,
         })
     }
 
@@ -70,10 +70,10 @@ impl Collector {
     async fn poll(&mut self) -> Result<(), CollectorError> {
         log::info!("checking for new items");
         let since = self.last_unboxing.as_ref();
-        let last_id = self.last_parsed_history_id.as_deref();
+        let last_item = self.last_known_item.as_deref();
         let mut new_items = self
             .steam_client
-            .fetch_new_items(since, last_id)
+            .fetch_new_items(since, last_item)
             .await?;
 
         if new_items.is_empty() {
@@ -84,7 +84,7 @@ impl Collector {
         self.send_results(&new_items).await?;
         let last = new_items.remove(0);
         self.last_unboxing = Some(last.at);
-        self.last_parsed_history_id = Some(last.history_id);
+        self.last_known_item = Some(last.history_id);
 
         Ok(())
     }

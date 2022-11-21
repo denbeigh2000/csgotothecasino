@@ -4,6 +4,7 @@ use chrono::{DateTime, Local, NaiveDateTime, TimeZone, Utc};
 use regex::Regex;
 use scraper::{ElementRef, Html, Selector};
 use serde::{Deserialize, Serialize};
+use serde_aux::field_attributes::deserialize_number_from_string;
 use thiserror::Error;
 
 lazy_static::lazy_static! {
@@ -57,6 +58,24 @@ pub struct InventoryId {
     pub instance_id: u64,
 }
 
+impl From<&InventoryDescription> for InventoryId {
+    fn from(item: &InventoryDescription) -> Self {
+        Self {
+            class_id: item.class_id,
+            instance_id: item.instance_id,
+        }
+    }
+}
+
+impl From<&Asset> for InventoryId {
+    fn from(item: &Asset) -> Self {
+        Self {
+            class_id: item.class_id,
+            instance_id: item.instance_id,
+        }
+    }
+}
+
 impl InventoryId {
     pub fn new(class_id: u64, instance_id: u64) -> Self {
         Self {
@@ -64,6 +83,45 @@ impl InventoryId {
             instance_id,
         }
     }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct InventoryDescription {
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    #[serde(rename(deserialize = "classid"))]
+    pub class_id: u64,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    #[serde(rename(deserialize = "instanceid"))]
+    pub instance_id: u64,
+    pub icon_url: String,
+    #[serde(rename(deserialize = "market_hash_name"))]
+    pub name: String,
+    #[serde(rename = "type")]
+    pub variant: String,
+
+    pub actions: Option<Vec<Action>>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Action {
+    link: String,
+    name: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Asset {
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    #[serde(rename(deserialize = "appid"))]
+    app_id: u32,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    #[serde(rename(deserialize = "assetid"))]
+    asset_id: u64,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    #[serde(rename(deserialize = "classid"))]
+    class_id: u64,
+    #[serde(deserialize_with = "deserialize_number_from_string")]
+    #[serde(rename(deserialize = "instanceid"))]
+    instance_id: u64,
 }
 
 #[derive(Debug)]

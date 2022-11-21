@@ -80,6 +80,7 @@ impl Id {
         self.id
     }
 
+    // NOTE: Should we accept a different count, etc here?
     pub fn inventory_url(&self) -> &str {
         self.inventory_url.as_ref()
     }
