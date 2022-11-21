@@ -26,6 +26,7 @@ lazy_static::lazy_static! {
     pub static ref USER_ID_REGEX: Regex = Regex::new("commentthread_Profile_([0-9]+)_.*").unwrap();
 }
 
+/// Represents some non-unique item on the Steam Market (keys, cases, etc)
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TrivialItem {
     name: String,
@@ -52,6 +53,7 @@ impl TrivialItem {
     }
 }
 
+/// Minimal representation of a unique item in a user's inventory
 #[derive(Debug, Hash, PartialEq, Eq, Deserialize, Serialize)]
 pub struct InventoryId {
     pub class_id: u64,
@@ -104,8 +106,14 @@ pub struct InventoryDescription {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Action {
-    link: String,
-    name: String,
+    pub link: String,
+    pub name: String,
+}
+
+impl Action {
+    pub fn is_csgo_inspect_link(&self) -> bool {
+        self.name.starts_with("Inspect") && self.link.starts_with("steam://rungame/730/")
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -124,6 +132,13 @@ pub struct Asset {
     instance_id: u64,
 }
 
+impl Asset {
+    pub fn asset_id(&self) -> &u64 {
+        &self.asset_id
+    }
+}
+
+/// Represents a transaction fetched from the Inventory History page.
 #[derive(Debug)]
 pub struct RawUnlock {
     pub history_id: String,

@@ -3,6 +3,16 @@ use thiserror::Error;
 
 use super::parsing::{AuthenticationParseError, ParseFailure};
 
+// TODO: Handle rate limiting errors as its' own special category??
+
+#[derive(Debug, Error)]
+pub enum FetchInventoryError {
+    #[error("HTTP error: {0}")]
+    Transport(#[from] reqwest::Error),
+    #[error("error deserlializing inventory: {0}")]
+    Deserializing(#[from] serde_json::Error),
+}
+
 #[derive(Debug, Error)]
 pub enum FetchNewUnpreparedItemsError {
     #[error("HTTP error: {0}")]
@@ -23,10 +33,10 @@ pub enum FetchNewUnpreparedItemsError {
 
 #[derive(Debug, Error)]
 pub enum FetchItemsError {
+    #[error("error fetching inventory: {0}")]
+    FetchInventory(#[from] FetchInventoryError),
     #[error("error fetching raw items: {0}")]
     FetchUnpreparedItems(#[from] FetchNewUnpreparedItemsError),
-    #[error("error preparing items from inventory data: {0}")]
-    PreparingItems(#[from] PrepareItemsError),
 }
 
 #[derive(Debug, Error)]
@@ -35,6 +45,8 @@ pub enum PrepareItemsError {
     Transport(#[from] reqwest::Error),
     #[error("error deserialising inventory: {0}")]
     Deserializing(#[from] serde_json::Error),
+    #[error("error fetching inventory data: {0}")]
+    PreparingItems(#[from] FetchItemsError),
 }
 
 #[derive(Debug, Error)]

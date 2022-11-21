@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::convert::Infallible;
 
 use chrono::{DateTime, Utc};
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
@@ -8,18 +7,17 @@ use reqwest::header::COOKIE;
 use reqwest::{Client, Request, StatusCode};
 use scraper::Html;
 use serde::{Deserialize, Serialize};
-use serde_aux::field_attributes::deserialize_number_from_string;
 use thiserror::Error;
 
 use crate::errors::{
-    AuthenticationCheckError, FetchItemsError, FetchNewUnpreparedItemsError, LocalPrepareError,
-    PrepareItemsError,
+    AuthenticationCheckError, FetchInventoryError, FetchItemsError, FetchNewUnpreparedItemsError,
+    LocalPrepareError, PrepareItemsError,
 };
 pub use crate::id::{Id, IdUrlParseError};
-pub use crate::parsing::InventoryId, InventoryDescription;
 use crate::parsing::{
-    is_authenticated, parse_raw_unlock, ParseSuccess, RawUnlock, TrivialItem, TRADE_SELECTOR,
+    is_authenticated, parse_raw_unlock, Asset, ParseSuccess, RawUnlock, TrivialItem, TRADE_SELECTOR,
 };
+pub use crate::parsing::{InventoryDescription, InventoryId};
 
 pub mod errors;
 mod id;
@@ -39,6 +37,7 @@ lazy_static::lazy_static! {
 
 type LocalPrepareResult = Result<UnhydratedUnlock, LocalPrepareError>;
 
+/// A transaction with additional
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UnhydratedUnlock {
     pub history_id: String,
@@ -174,6 +173,8 @@ impl SteamClient {
         // have it handy by our stored InventoryId if needed)
         // TODO: This needs to fetch inventory first to avoid excceding rate limits.
         // Re-use inventory data when calling prepare_unlocks
+        let inv = self.fetch_inventory().await?;
+        let last_items = inv.assets.last();
         let unhydrated = self.fetch_new_unprepared_items(since, last_id).await?;
         if unhydrated.is_empty() {
             return Ok(vec![]);
@@ -248,15 +249,8 @@ impl SteamClient {
 
     // TODO: Account for failure modes of fetching Inventory (should be able to
     // adapt from hydration functions)
-    async fn fetch_inventory(&self) -> Result<Inventory, Infallible> {
-        todo!()
-    }
-
-    async fn prepare_unlocks(
-        &self,
-        items: Vec<RawUnlock>,
-        name: String,
-    ) -> Result<Vec<UnhydratedUnlock>, PrepareItemsError> {
+    async fn fetch_inventory(&self) -> Result<Inventory, FetchInventoryError> {
+        // TODO: needs to handle unauthenticated requests as a failure mode
         let resp = self
             .http_client
             .execute(self.inv_req())
@@ -265,10 +259,25 @@ impl SteamClient {
             .text()
             .await?;
 
-        let inv: Inventory = serde_json::from_str(&resp)?;
-        let data_map: HashMap<InventoryId, InventoryDescription> = inv.descriptions.into_iter().collect();
-        let asset_map: HashMap<InventoryId, Asset> = inv.assets.into_iter().collect();
+        serde_json::from_str(&resp)?
+    }
 
+    async fn prepare_unlocks(
+        &self,
+        items: Vec<RawUnlock>,
+        name: String,
+    ) -> Result<Vec<UnhydratedUnlock>, PrepareItemsError> {
+        let inv = self.fetch_inventory().await?;
+        let data_map: HashMap<InventoryId, InventoryDescription> = inv
+            .descriptions
+            .into_iter()
+            .map(|i| (&i.into(), i))
+            .collect();
+
+        let asset_map: HashMap<InventoryId, Asset> =
+            inv.assets.into_iter().map(|i| (&i.into(), i)).collect();
+
+        // TODO: Write a comment explaining why this is here
         let (results, errs): (Vec<_>, Vec<_>) = items
             .into_iter()
             .map(|i| {
@@ -286,14 +295,12 @@ impl SteamClient {
                     .ok_or(LocalPrepareError::NoInspectLink)?;
                 let link_tpl = actions
                     .iter()
-                    .find(|a| {
-                        a.name.starts_with("Inspect") && a.link.starts_with("steam://rungame/730/")
-                    })
+                    .find(|a| a.is_csgo_inspect_link())
                     .ok_or(LocalPrepareError::NoInspectLink)?;
 
                 let item_market_link = link_tpl
                     .link
-                    .replacen("%assetid%", &item_asset.asset_id.to_string(), 1)
+                    .replacen("%assetid%", &item_asset.asset_id().to_string(), 1)
                     .replacen("%owner_steamid%", &self.id.user_id().to_string(), 1);
 
                 let history_id = i.history_id;
