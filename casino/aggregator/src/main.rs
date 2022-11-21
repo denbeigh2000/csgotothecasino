@@ -1,4 +1,4 @@
-use std::net::{AddrParseError, SocketAddr};
+use std::net::SocketAddr;
 use std::path::PathBuf;
 
 use csgofloat::{CsgoFloatClient, CsgoFloatClientCreateError};

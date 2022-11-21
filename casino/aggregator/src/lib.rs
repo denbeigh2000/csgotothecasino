@@ -36,7 +36,7 @@ pub async fn serve(bind_addr: &SocketAddr, handler: Handler) -> Result<(), Infal
             Ok::<_, Infallible>(service_fn(move |req| {
                 let h = Arc::clone(&h);
                 async move {
-                    let resp: Result<Response<Body>, Infallible> = handle_request(&*h, req).await;
+                    let resp: Result<Response<Body>, Infallible> = handle_request(&h, req).await;
 
                     resp
                 }

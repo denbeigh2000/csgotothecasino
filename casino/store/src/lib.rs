@@ -80,7 +80,7 @@ impl Store {
         let redis_keys: Vec<String> = keys.iter().map(|k| format!("unlock_{}", k)).collect();
         Ok(match &redis_keys[..] {
             [] => vec![],
-            [only] => conn.get(&only).await?,
+            [only] => conn.get(only).await?,
             _ => conn.get(redis_keys).await?,
         })
     }
@@ -107,7 +107,7 @@ impl Store {
 
     pub async fn publish(&self, entry: &Unlock) -> Result<()> {
         let mut conn = self.get_conn().await?;
-        let _res: () = conn.publish(&EVENT_KEY, entry).await?;
+        let _res: () = conn.publish(EVENT_KEY, entry).await?;
 
         Ok(())
     }
