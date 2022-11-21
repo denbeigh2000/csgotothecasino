@@ -21,6 +21,8 @@ async fn main() {
 
 #[derive(Debug, Error)]
 enum AggregatorError {
+    #[error("{0}")]
+    ParsingCommandLineArgs(#[from] clap::Error),
     #[error("error creating csgofloat client: {0}")]
     CreatingCsgoFloatClient(#[from] CsgoFloatClientCreateError),
     #[error("error creating backing store: {0}")]
@@ -52,7 +54,7 @@ struct Args  {
 }
 
 async fn real_main() -> Result<(), AggregatorError> {
-    let args = Args::parse();
+    let args = Args::try_parse()?;
 
     logging::init(args.log_level);
 

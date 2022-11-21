@@ -40,7 +40,7 @@ struct Args {
 }
 
 async fn main_result() -> Result<(), MainError> {
-    let args = Args::parse();
+    let args = Args::try_parse()?;
 
     logging::init(args.log_level);
 
@@ -67,6 +67,8 @@ async fn main_result() -> Result<(), MainError> {
 
 #[derive(Debug, Error)]
 enum MainError {
+    #[error("{0}")]
+    ParsingCommandLineArgs(#[from] clap::Error),
     #[error("error loading config: {0}")]
     LoadingConfig(#[from] ConfigLoadError),
     #[error("error gathering user credentials: {0}")]

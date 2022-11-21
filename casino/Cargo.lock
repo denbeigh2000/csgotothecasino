@@ -133,6 +133,7 @@ dependencies = [
  "logging",
  "reqwest",
  "steam",
+ "thiserror",
  "tokio",
 ]
 

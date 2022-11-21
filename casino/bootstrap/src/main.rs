@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use clap::Parser;
 use reqwest::{Client, Url};
+use thiserror::Error;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
@@ -26,10 +27,40 @@ struct Args {
     log_level: log::LevelFilter,
 }
 
+#[derive(Debug, Error)]
+enum BootstrapError {
+    #[error("{0}")]
+    ParsingCommandLineArgs(#[from] clap::Error),
+    #[error("Config path does not exist at {0}")]
+    ConfigDoesNotExist(PathBuf),
+    #[error("Error downloading binary ({0})")]
+    DownloadingBinary(#[from] DownloadError),
+    #[error("Error running end binary ({0})")]
+    RunningBinary(#[from] std::io::Error),
+}
+
+#[derive(Debug, Error)]
+enum DownloadError {
+    #[error("failed to download file ({0})")]
+    Transport(#[from] reqwest::Error),
+    #[error("io error when writing file")]
+    IO(#[from] std::io::Error),
+}
+
 #[tokio::main]
 async fn main() {
+    match inner_main().await {
+        Ok(()) => return,
+        Err(BootstrapError::ParsingCommandLineArgs(e)) => eprintln!("{e}"),
+        Err(e) => log::error!("{e}"),
+    }
+
+    std::process::exit(1);
+}
+
+async fn inner_main() -> Result<(), BootstrapError> {
     // TODO
-    let args = Args::parse();
+    let args = Args::try_parse()?;
 
     // let log_level: String = args.value_of(logging::LEVEL_FLAG_NAME).unwrap().to_string();
     logging::init(args.log_level);
@@ -44,28 +75,36 @@ async fn main() {
         std::process::exit(1);
     }
 
+    if !args.config_path.exists() {
+        return Err(BootstrapError::ConfigDoesNotExist(args.config_path));
+    }
+
     if !args.out_file.exists() {
-        log::info!("Downloading binary to {}...", args.out_file.as_os_str().to_str().unwrap());
-        download_file(&args.out_file).await;
+        log::info!(
+            "Downloading binary to {}...",
+            args.out_file.as_os_str().to_str().unwrap()
+        );
+        download_file(&args.out_file).await?;
     }
 
     if !args.dry_run {
         Command::new(args.out_file.as_os_str())
             .arg(args.config_path.as_os_str())
-            .spawn()
-            .unwrap()
-            .wait()
-            .await
-            .unwrap();
+            .spawn()?
+            .wait().await.unwrap();
     }
+
+    Ok(())
 }
 
-async fn download_file(out: &Path) {
+async fn download_file(out: &Path) -> Result<(), DownloadError> {
     let client = Client::new();
 
-    let resp = client.get(BINARY_URL.clone()).send().await.unwrap();
-    let bstream = resp.bytes().await.unwrap();
-    let mut f = File::create(out).await.unwrap();
+    let resp = client.get(BINARY_URL.clone()).send().await?;
+    let bstream = resp.bytes().await?;
+    let mut f = File::create(out).await?;
 
-    f.write_all(&bstream).await.unwrap();
+    f.write_all(&bstream).await?;
+
+    Ok(())
 }
