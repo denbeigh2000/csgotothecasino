@@ -37,10 +37,13 @@ lazy_static::lazy_static! {
 
 type LocalPrepareResult = Result<UnhydratedUnlock, LocalPrepareError>;
 
-/// A transaction with additional
+// TODO: This needs to also contain the InventoryId of the item for local
+// deduplication
+/// A minimal inventory transaction, suitable for sending to our backend.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UnhydratedUnlock {
     pub history_id: String,
+    pub inventory_id: InventoryId,
 
     pub key: Option<TrivialItem>,
     pub case: TrivialItem,
@@ -336,6 +339,7 @@ impl SteamClient {
 
                 Ok(UnhydratedUnlock {
                     history_id,
+                    inventory_id: i.item,
 
                     key,
                     case,

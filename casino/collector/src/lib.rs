@@ -70,7 +70,7 @@ impl Collector {
     async fn poll(&mut self) -> Result<(), CollectorError> {
         log::info!("checking for new items");
         let since = self.last_unboxing.as_ref();
-        let last_item = self.last_known_item.as_deref();
+        let last_item = self.last_known_item.as_ref();
         let mut new_items = self
             .steam_client
             .fetch_history_for_new_items(since, last_item)
@@ -84,7 +84,7 @@ impl Collector {
         self.send_results(&new_items).await?;
         let last = new_items.remove(0);
         self.last_unboxing = Some(last.at);
-        self.last_known_item = Some(last.history_id);
+        self.last_known_item = Some(last.inventory_id);
 
         Ok(())
     }

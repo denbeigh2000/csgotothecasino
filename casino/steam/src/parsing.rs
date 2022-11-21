@@ -54,7 +54,7 @@ impl TrivialItem {
 }
 
 /// Minimal representation of a unique item in a user's inventory
-#[derive(Debug, Hash, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Deserialize, Serialize)]
 pub struct InventoryId {
     pub class_id: u64,
     pub instance_id: u64,
