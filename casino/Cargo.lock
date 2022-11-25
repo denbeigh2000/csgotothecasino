@@ -6,7 +6,6 @@ version = 3
 name = "aggregator"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "axum",
  "bb8-redis",
  "chrono",
@@ -15,14 +14,11 @@ dependencies = [
  "futures-util",
  "headers",
  "hyper",
- "hyper-tungstenite",
- "lazy_static",
  "log",
  "logging",
  "redis",
  "regex",
  "reqwest",
- "route-recognizer",
  "scraper",
  "serde",
  "serde-aux",
@@ -856,19 +852,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "hyper-tungstenite"
-version = "0.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "36692e7f740cd10fbe3f84f7cb7bfec2a71f929e72f97c19824d3f7f45aeec9b"
-dependencies = [
- "hyper",
- "pin-project",
- "tokio",
- "tokio-tungstenite",
- "tungstenite",
-]
-
-[[package]]
 name = "iana-time-zone"
 version = "0.1.53"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1599,12 +1582,6 @@ dependencies = [
  "web-sys",
  "winreg",
 ]
-
-[[package]]
-name = "route-recognizer"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "afab94fb28594581f62d981211a9a4d53cc8130bbcbbb89a0440d9b8e81a7746"
 
 [[package]]
 name = "rustc_version"

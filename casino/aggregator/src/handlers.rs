@@ -6,14 +6,10 @@ use axum::headers::Authorization;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::{Json, TypedHeader};
-use futures_util::{SinkExt, Stream, StreamExt};
+use futures_util::{Stream, StreamExt};
 use headers::authorization::Bearer;
-use hyper::header::AUTHORIZATION;
-use hyper_tungstenite::hyper::{Body, Method, Request};
-use hyper_tungstenite::{is_upgrade_request, HyperWebsocket};
 use thiserror::Error;
 
-use super::http::{resp_400, resp_403, resp_500};
 use super::keystore::KeyStore;
 use super::websocket::{handle_emit, handle_recv, MessageSendError};
 use csgofloat::{CsgoFloatClient, CsgoFloatFetchError};
@@ -232,22 +228,6 @@ impl Handler {
     }
 }
 
-pub async fn handle_state_hyper(
-    h: &Handler,
-    req: Request<Body>,
-) -> Result<Response<Body>, GetStateError> {
-    if req.method() != Method::GET {
-        log::info!("not a GET request");
-        return Ok(resp_400());
-    }
-
-    let state = h.get_state().await?;
-    let state_data = serde_json::to_vec(&state)?;
-    let resp = Response::builder().body(Body::from(state_data)).unwrap();
-
-    Ok(resp)
-}
-
 pub async fn handle_state(
     State(state): State<Arc<Handler>>,
 ) -> Result<Json<Vec<Unlock>>, GetStateError> {
@@ -263,48 +243,6 @@ pub async fn handle_upload(
     state.save(key, body).await
 }
 
-pub async fn handle_upload_hyper(
-    h: &Handler,
-    mut req: Request<Body>,
-) -> Result<Response<Body>, SaveItemsError> {
-    if req.method() != Method::POST {
-        log::info!("not a POST request");
-        return Ok(resp_400());
-    }
-
-    let data = hyper::body::to_bytes(req.body_mut()).await?;
-    let unlock: Vec<UnhydratedUnlock> = match serde_json::from_slice(&data) {
-        Ok(u) => u,
-        Err(e) => {
-            log::warn!("parsing failed: {}", e);
-            return Ok(resp_400());
-        }
-    };
-
-    let key = match req.headers().get(AUTHORIZATION) {
-        Some(k) => k.to_str().unwrap(),
-        None => return Ok(resp_403()),
-    };
-
-    let status = match h.save(key, unlock).await {
-        Ok(_) => StatusCode::OK,
-        Err(e) => {
-            log::warn!("saving failed: {}", e);
-            match e {
-                SaveItemsError::BadKey => StatusCode::UNAUTHORIZED,
-                _ => StatusCode::INTERNAL_SERVER_ERROR,
-            }
-        }
-    };
-
-    let resp = Response::builder()
-        .status(status)
-        .body(Body::empty())
-        .unwrap();
-
-    Ok(resp)
-}
-
 pub async fn handle_websocket(State(state): State<Arc<Handler>>, ws: WebSocketUpgrade) -> Result<(), StreamError> {
     let stream = state.event_stream().await.map(Box::pin)?;
     ws.on_upgrade(|socket| async move {
@@ -316,42 +254,12 @@ pub async fn handle_websocket(State(state): State<Arc<Handler>>, ws: WebSocketUp
     Ok(())
 }
 
-// pub async fn handle_websocket_hyper(
-//     h: &Handler,
-//     req: Request<Body>,
-// ) -> Result<Response<Body>, StreamError> {
-//     if !is_upgrade_request(&req) {
-//         return Ok(resp_400());
-//     }
-// 
-//     let stream = match h.event_stream().await {
-//         Ok(s) => s,
-//         Err(e) => {
-//             log::error!("error opening event stream: {}", e);
-//             return Ok(resp_500());
-//         }
-//     };
-// 
-//     let (resp, socket) = hyper_tungstenite::upgrade(req, None).unwrap();
-//     tokio::spawn(spawn_handle_websocket(Box::pin(stream), socket));
-// 
-//     Ok(resp)
-// }
-
 #[derive(Debug, Error)]
 enum WebsocketServingError {
-    #[error("error upgrading: {0}")]
-    Upgrading(axum::Error),
     #[error("error receiving message: {0}")]
     Receiving(axum::Error),
     #[error("error sending message: {0}")]
     Sending(axum::Error),
-}
-
-async fn spawn_handle_websocket<S: Stream<Item = Unlock> + Unpin>(stream: S, ws: WebSocket) {
-    if let Err(e) = handle_upgraded_websocket(stream, ws).await {
-        log::error!("error serving websocket: {}", e);
-    }
 }
 
 async fn handle_upgraded_websocket<S: Stream<Item = Unlock> + Unpin>(

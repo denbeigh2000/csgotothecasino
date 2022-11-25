@@ -7,21 +7,17 @@ edition = "2021"
 name = "aggregator"
 
 [dependencies]
-async-trait = "0.1.58"
 axum = { version = "0.6.0-rc.5", features = ["default", "headers", "json", "ws"] }
 bb8-redis = "0.12"
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.0", features = ["derive", "env"] }
 futures-util = "0.3"
 headers = "0.3.8"
-hyper = { version = "0.14", features = ["http1", "server"] }
-hyper-tungstenite = "0.8"
-lazy_static = "1.4"
+hyper = "0.14"
 log = "0.4"
 redis = { version = "0.22", features = [] }
 regex = "1"
 reqwest = { version = "0.11.12", features = ["cookies", "json", "stream"] }
-route-recognizer = "0.3"
 scraper = "0.13"
 serde = { version = "1.0", features = ["derive"] }
 serde-aux = "4.1"

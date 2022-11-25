@@ -9,7 +9,7 @@ use redis::ConnectionInfo;
 use thiserror::Error;
 
 use aggregator::keystore::{KeyStore, KeyStoreLoadSaveError};
-use aggregator::{serve_hyper, Handler};
+use aggregator::{serve, Handler, ServingError};
 
 #[tokio::main]
 async fn main() {
@@ -31,6 +31,8 @@ enum AggregatorError {
     LoadingKeystore(#[from] KeyStoreLoadSaveError),
     #[error("error creating steam market price client: {0}")]
     CreatingMarketPriceClient(#[from] MarketPriceClientCreateError),
+    #[error("error serving http: {0}")]
+    ServingHTTP(#[from] ServingError)
 }
 
 #[derive(Parser)]
@@ -65,7 +67,7 @@ async fn real_main() -> Result<(), AggregatorError> {
 
     let h = Handler::new(store, keystore, csgo_float, market_price_client);
 
-    serve_hyper(&args.bind_addr, h).await.unwrap();
+    serve(&args.bind_addr, h).await?;
 
     Ok(())
 }

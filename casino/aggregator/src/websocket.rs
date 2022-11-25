@@ -1,7 +1,4 @@
 use axum::extract::ws::{Message, WebSocket};
-use futures_util::SinkExt;
-use hyper_tungstenite::hyper::upgrade::Upgraded;
-use hyper_tungstenite::WebSocketStream;
 use thiserror::Error;
 
 use steam::Unlock;
