@@ -9,7 +9,7 @@ use redis::ConnectionInfo;
 use thiserror::Error;
 
 use aggregator::keystore::{KeyStore, KeyStoreLoadSaveError};
-use aggregator::{serve, Handler};
+use aggregator::{serve_hyper, Handler};
 
 #[tokio::main]
 async fn main() {
@@ -65,7 +65,7 @@ async fn real_main() -> Result<(), AggregatorError> {
 
     let h = Handler::new(store, keystore, csgo_float, market_price_client);
 
-    serve(&args.bind_addr, h).await.unwrap();
+    serve_hyper(&args.bind_addr, h).await.unwrap();
 
     Ok(())
 }

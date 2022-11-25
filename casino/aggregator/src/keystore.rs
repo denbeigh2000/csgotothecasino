@@ -5,6 +5,7 @@ use thiserror::Error;
 use tokio::fs::File;
 use tokio::io::{self, AsyncReadExt};
 
+/// Used for storing pre-shared authentication ekys
 pub struct KeyStore {
     keys: HashMap<String, String>,
 }

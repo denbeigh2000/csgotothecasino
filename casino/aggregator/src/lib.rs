@@ -2,7 +2,7 @@ use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-// TODO: Update this to use axum
+use axum::routing;
 use hyper_tungstenite::hyper::server::conn::AddrStream;
 use hyper_tungstenite::hyper::service::{make_service_fn, service_fn};
 use hyper_tungstenite::hyper::{Body, Request, Response};
@@ -14,7 +14,7 @@ mod websocket;
 
 mod handlers;
 pub use self::handlers::Handler;
-use self::handlers::{handle_state, handle_upload, handle_websocket, HandlerError};
+use self::handlers::{handle_state, handle_state_hyper, handle_upload, handle_upload_hyper, handle_websocket, HandlerError};
 use self::http::{resp_404, resp_500, router, Route};
 
 lazy_static::lazy_static! {
@@ -27,7 +27,18 @@ async fn ctrl_c() {
     log::info!("shutting down");
 }
 
-pub async fn serve(bind_addr: &SocketAddr, handler: Handler) -> Result<(), Infallible> {
+pub async fn serve(bind_addr: &SocketAddr, handler: Handler) -> Result<(), hyper::Error> {
+    let handler = Arc::new(handler);
+    let app = routing::Router::new()
+        .route("/", routing::get(handle_state))
+        .route("/upload", routing::post(handle_upload))
+        .route("/stream", routing::get(handle_websocket))
+        .with_state(handler);
+
+    axum::Server::bind(bind_addr).serve(app.into_make_service()).await
+}
+
+pub async fn serve_hyper(bind_addr: &SocketAddr, handler: Handler) -> Result<(), Infallible> {
     let h = Arc::new(handler);
 
     let svc = make_service_fn(move |_socket: &AddrStream| {
@@ -60,11 +71,9 @@ async fn handle_request(h: &Handler, req: Request<Body>) -> Result<Response<Body
     match ROUTER.recognize(req.uri().path()) {
         Ok(m) => {
             let resp = match m.handler() {
-                Route::State => handle_state(h, req).await.map_err(HandlerError::GetState),
-                Route::Stream => handle_websocket(h, req)
-                    .await
-                    .map_err(HandlerError::StreamItems),
-                Route::Upload => handle_upload(h, req).await.map_err(HandlerError::SaveItems),
+                Route::State => handle_state_hyper(h, req).await.map_err(HandlerError::GetState),
+                Route::Upload => handle_upload_hyper(h, req).await.map_err(HandlerError::SaveItems),
+                _ => unimplemented!(),
             }
             .unwrap_or_else(|e| {
                 log::error!("error serving request: {}", e);

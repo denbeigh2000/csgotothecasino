@@ -1,6 +1,6 @@
+use axum::extract::ws::{Message, WebSocket};
 use futures_util::SinkExt;
 use hyper_tungstenite::hyper::upgrade::Upgraded;
-use hyper_tungstenite::tungstenite::{self, Message};
 use hyper_tungstenite::WebSocketStream;
 use thiserror::Error;
 
@@ -11,11 +11,11 @@ pub enum MessageSendError {
     #[error("ser/deserialisation error: {0}")]
     Serde(#[from] serde_json::Error),
     #[error("error sending message: {0}")]
-    Transport(#[from] tungstenite::Error),
+    Transport(#[from] axum::Error),
 }
 
 pub async fn handle_emit(
-    socket: &mut WebSocketStream<Upgraded>,
+    socket: &mut WebSocket,
     unlock: Unlock,
 ) -> Result<(), MessageSendError> {
     let encoded = serde_json::to_vec(&unlock)?;

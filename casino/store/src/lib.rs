@@ -16,6 +16,7 @@ type Result<T> = std::result::Result<T, StoreError>;
 
 const EVENT_KEY: &str = "new_events";
 
+/// Persists information about our application state.
 pub struct Store {
     client: Client,
     pool: Arc<Pool<RedisConnectionManager>>,

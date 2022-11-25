@@ -1,7 +1,15 @@
+use std::sync::Arc;
+
+use axum::extract::State;
+use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
+use axum::headers::Authorization;
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
+use axum::{Json, TypedHeader};
 use futures_util::{SinkExt, Stream, StreamExt};
+use headers::authorization::Bearer;
 use hyper::header::AUTHORIZATION;
-use hyper_tungstenite::hyper::{Body, Method, Request, Response, StatusCode};
-use hyper_tungstenite::tungstenite::{self, Message};
+use hyper_tungstenite::hyper::{Body, Method, Request};
 use hyper_tungstenite::{is_upgrade_request, HyperWebsocket};
 use thiserror::Error;
 
@@ -11,7 +19,7 @@ use super::websocket::{handle_emit, handle_recv, MessageSendError};
 use csgofloat::{CsgoFloatClient, CsgoFloatFetchError};
 use steam::errors::MarketPriceFetchError;
 use steam::{MarketPriceClient, UnhydratedUnlock, Unlock};
-use store::{StoreError as StoreError, Store};
+use store::{Store, StoreError};
 
 #[derive(Debug, Error)]
 pub enum HandlerError {
@@ -47,6 +55,20 @@ pub enum SaveItemsError {
     Transport(#[from] hyper::Error),
 }
 
+impl IntoResponse for SaveItemsError {
+    fn into_response(self) -> Response {
+        let status = match self {
+            SaveItemsError::BadKey => StatusCode::UNAUTHORIZED,
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+
+        // TODO: Consider if this should be empty, if we should log something,
+        // and if we should do any sort of logging/error reporting at a higher
+        // level.
+        (status, self.to_string()).into_response()
+    }
+}
+
 impl From<CsgoFloatFetchError> for SaveItemsError {
     fn from(e: CsgoFloatFetchError) -> Self {
         SaveItemsError::HydratingItem(HydrationError::FloatInfo(e))
@@ -63,6 +85,12 @@ pub enum GetStateError {
     SerializingItems(#[from] serde_json::Error),
 }
 
+impl IntoResponse for GetStateError {
+    fn into_response(self) -> Response {
+        (StatusCode::INTERNAL_SERVER_ERROR, self.to_string()).into_response()
+    }
+}
+
 impl From<CsgoFloatFetchError> for GetStateError {
     fn from(e: CsgoFloatFetchError) -> Self {
         GetStateError::HydratingItem(HydrationError::FloatInfo(e))
@@ -72,6 +100,12 @@ impl From<CsgoFloatFetchError> for GetStateError {
 #[derive(Debug, Error)]
 #[error("error getting data stream: {0}")]
 pub struct StreamError(#[from] StoreError);
+
+impl IntoResponse for StreamError {
+    fn into_response(self) -> Response {
+        (StatusCode::INTERNAL_SERVER_ERROR, self.to_string()).into_response()
+    }
+}
 
 pub struct Handler {
     store: Store,
@@ -198,7 +232,7 @@ impl Handler {
     }
 }
 
-pub async fn handle_state(
+pub async fn handle_state_hyper(
     h: &Handler,
     req: Request<Body>,
 ) -> Result<Response<Body>, GetStateError> {
@@ -214,7 +248,22 @@ pub async fn handle_state(
     Ok(resp)
 }
 
+pub async fn handle_state(
+    State(state): State<Arc<Handler>>,
+) -> Result<Json<Vec<Unlock>>, GetStateError> {
+    state.get_state().await.map(Json::from)
+}
+
 pub async fn handle_upload(
+    State(state): State<Arc<Handler>>,
+    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+    Json(body): Json<Vec<UnhydratedUnlock>>,
+) -> Result<(), SaveItemsError> {
+    let key = auth.0.token();
+    state.save(key, body).await
+}
+
+pub async fn handle_upload_hyper(
     h: &Handler,
     mut req: Request<Body>,
 ) -> Result<Response<Body>, SaveItemsError> {
@@ -256,39 +305,50 @@ pub async fn handle_upload(
     Ok(resp)
 }
 
-pub async fn handle_websocket(
-    h: &Handler,
-    req: Request<Body>,
-) -> Result<Response<Body>, StreamError> {
-    if !is_upgrade_request(&req) {
-        return Ok(resp_400());
-    }
-
-    let stream = match h.event_stream().await {
-        Ok(s) => s,
-        Err(e) => {
-            log::error!("error opening event stream: {}", e);
-            return Ok(resp_500());
+pub async fn handle_websocket(State(state): State<Arc<Handler>>, ws: WebSocketUpgrade) -> Result<(), StreamError> {
+    let stream = state.event_stream().await.map(Box::pin)?;
+    ws.on_upgrade(|socket| async move {
+        if let Err(e) = handle_upgraded_websocket(stream, socket).await {
+            log::error!("error serving websocket: {e}");
         }
-    };
+    });
 
-    let (resp, socket) = hyper_tungstenite::upgrade(req, None).unwrap();
-    tokio::spawn(spawn_handle_websocket(Box::pin(stream), socket));
-
-    Ok(resp)
+    Ok(())
 }
+
+// pub async fn handle_websocket_hyper(
+//     h: &Handler,
+//     req: Request<Body>,
+// ) -> Result<Response<Body>, StreamError> {
+//     if !is_upgrade_request(&req) {
+//         return Ok(resp_400());
+//     }
+// 
+//     let stream = match h.event_stream().await {
+//         Ok(s) => s,
+//         Err(e) => {
+//             log::error!("error opening event stream: {}", e);
+//             return Ok(resp_500());
+//         }
+//     };
+// 
+//     let (resp, socket) = hyper_tungstenite::upgrade(req, None).unwrap();
+//     tokio::spawn(spawn_handle_websocket(Box::pin(stream), socket));
+// 
+//     Ok(resp)
+// }
 
 #[derive(Debug, Error)]
 enum WebsocketServingError {
     #[error("error upgrading: {0}")]
-    Upgrading(tungstenite::Error),
+    Upgrading(axum::Error),
     #[error("error receiving message: {0}")]
-    Receiving(tungstenite::Error),
+    Receiving(axum::Error),
     #[error("error sending message: {0}")]
-    Sending(tungstenite::Error),
+    Sending(axum::Error),
 }
 
-async fn spawn_handle_websocket<S: Stream<Item = Unlock> + Unpin>(stream: S, ws: HyperWebsocket) {
+async fn spawn_handle_websocket<S: Stream<Item = Unlock> + Unpin>(stream: S, ws: WebSocket) {
     if let Err(e) = handle_upgraded_websocket(stream, ws).await {
         log::error!("error serving websocket: {}", e);
     }
@@ -296,9 +356,9 @@ async fn spawn_handle_websocket<S: Stream<Item = Unlock> + Unpin>(stream: S, ws:
 
 async fn handle_upgraded_websocket<S: Stream<Item = Unlock> + Unpin>(
     mut stream: S,
-    ws: HyperWebsocket,
+    mut ws: WebSocket,
 ) -> Result<(), WebsocketServingError> {
-    let mut ws = ws.await.map_err(WebsocketServingError::Upgrading)?;
+    // let mut ws = ws.map_err(WebsocketServingError::Upgrading)?;
 
     loop {
         tokio::select! {
