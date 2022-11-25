@@ -19,7 +19,7 @@ pub struct Collector {
     collection_url: Url,
     http_client: Client,
     steam_client: SteamClient,
-    pre_shared_key: String,
+    auth_header: String,
 
     poll_interval: Duration,
     last_unboxing: Option<DateTime<Utc>>,
@@ -39,12 +39,13 @@ impl Collector {
     {
         let http_client = Client::new();
         let collection_url: Url = collection_url.into_url().map_err(UrlParseError)?;
+        let auth_header = format!("Bearer {pre_shared_key}");
 
         Ok(Self {
             collection_url,
             http_client,
             steam_client,
-            pre_shared_key,
+            auth_header,
 
             poll_interval,
             last_unboxing: start_time,
@@ -99,7 +100,7 @@ impl Collector {
         self.http_client
             .post(self.collection_url.as_ref())
             .body(data)
-            .header(AUTHORIZATION, &self.pre_shared_key)
+            .header(AUTHORIZATION, &self.auth_header)
             .send()
             .await?
             .error_for_status()?;
