@@ -7,7 +7,7 @@ edition = "2021"
 name = "aggregator"
 
 [dependencies]
-axum = { version = "0.6.0-rc.5", features = ["default", "headers", "json", "ws"] }
+axum = { version = "0.6.0", features = ["default", "headers", "json", "ws"] }
 bb8-redis = "0.12"
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.0", features = ["derive", "env"] }
