@@ -13,10 +13,13 @@ use aggregator::{serve, Handler, ServingError};
 
 #[tokio::main]
 async fn main() {
-    if let Err(e) = real_main().await {
-        log::error!("fatal error: {}", e);
-        std::process::exit(1);
+    match real_main().await {
+        Err(AggregatorError::ParsingCommandLineArgs(e)) => eprintln!("{e}"),
+        Err(e) => eprintln!("fatal error: {e}"),
+        _ => return,
     }
+
+    std::process::exit(1);
 }
 
 #[derive(Debug, Error)]

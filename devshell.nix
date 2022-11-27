@@ -5,6 +5,7 @@
 , nodejs-18_x
 , tmux
 , yarn2nix-moretea
+, websocat
 , writeShellScriptBin
 }:
 
@@ -91,5 +92,5 @@ devshell.mkShell {
     { name = "ENV"; value = "dev"; }
   ];
 
-  packages = [ tmux redis rust-toolchain ] ++ node-tools;
+  packages = [ tmux redis rust-toolchain websocat ] ++ node-tools;
 }
