@@ -136,7 +136,7 @@ pub struct SteamClient {
 impl SteamClient {
     pub fn new(id: Id, creds: SteamCredentials) -> Self {
         let http_client = Client::builder().build().unwrap();
-        let cookie_str = creds.as_string();
+        let cookie_str = format!("{}; timezoneOffset=0,0", creds.as_string());
         let username = String::from("");
 
         Self {

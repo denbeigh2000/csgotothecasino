@@ -1,6 +1,6 @@
 use std::num::ParseIntError;
 
-use chrono::{DateTime, Local, NaiveDateTime, TimeZone, Utc};
+use chrono::{DateTime, NaiveDateTime, TimeZone, Utc};
 use regex::Regex;
 use scraper::{ElementRef, Html, Selector};
 use serde::{Deserialize, Serialize};
@@ -301,11 +301,9 @@ pub fn parse_raw_unlock(
         "%b %e, %Y %l:%M%P",
     )
     .map_err(|_| ParseFailure::DateFormattingChanged)?;
-    // TODO: Need to see if we can get "real" timezone from Steam.
-    let datetime = Local
+    let datetime = Utc
         .from_local_datetime(&datetime)
-        .unwrap()
-        .with_timezone(&Utc);
+        .unwrap();
 
     if since.map(|s| &datetime < s).unwrap_or(false) {
         // We have successfully started parsing a trade that is older than our threshold, return
