@@ -15,10 +15,13 @@ use tokio::io::{self, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 
 #[tokio::main]
 async fn main() {
-    if let Err(e) = main_result().await {
-        log::error!("fatal error: {}", e);
-        std::process::exit(1);
-    }
+    match main_result().await {
+        Err(MainError::ParsingCommandLineArgs(e)) => eprintln!("{e}"),
+        Err(e) => eprintln!("fatal error: {e}"),
+        _ => return,
+    };
+
+    std::process::exit(1);
 }
 
 #[derive(Parser)]
