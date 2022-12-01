@@ -173,10 +173,12 @@ impl SteamClient {
         // TODO: Need to check what exactly start_assetid does (but we should
         // have it handy by our stored InventoryId if needed)
         let inv = self.fetch_inventory().await?;
+        log::debug!("inventory count: {}", inv.assets.len());
         match (inv.descriptions.first(), last_item) {
             // Return early if we have made a successful call and it shows we
             // have no new items in our inventory.
             (Some(new), Some(old)) => {
+                log::debug!("new item: {new:?}");
                 let new_inv_id = InventoryId::from(new);
                 if &new_inv_id == old {
                     // No new items to process
@@ -193,6 +195,8 @@ impl SteamClient {
         if unhydrated.is_empty() {
             return Ok(vec![]);
         }
+
+        log::debug!("{} unhydrated items", unhydrated.len());
         let prepared = self
             .prepare_unlocks(inv, unhydrated, self.username.clone())
             .await?;
@@ -221,6 +225,7 @@ impl SteamClient {
         since: Option<&DateTime<Utc>>,
         last_item: Option<&InventoryId>,
     ) -> Result<Vec<RawUnlock>, FetchNewUnpreparedItemsError> {
+        log::debug!("checking since: {since:?}");
         let resp = self.http_client.execute(self.inv_history_req()).await?;
 
         match resp.status() {
@@ -250,9 +255,11 @@ impl SteamClient {
                 ParseSuccess::WrongTransactionType => {
                     seen_any = true;
                     continue;
-                }
+                },
             }
         }
+
+        log::debug!("returning {} items", unlocks.len());
 
         if !seen_any {
             return Err(FetchNewUnpreparedItemsError::NoHistoryFound);
@@ -270,13 +277,7 @@ impl SteamClient {
             .text()
             .await?;
 
-        let mut inv: Inventory = serde_json::from_str(&resp).map_err(FetchInventoryError::from)?;
-
-        // NOTE: Steam returns these in oldest-first order, reverse them so
-        // they're easier to work with.
-        inv.assets.reverse();
-        inv.descriptions.reverse();
-        Ok(inv)
+        serde_json::from_str(&resp).map_err(FetchInventoryError::from)
     }
 
     async fn prepare_unlocks(

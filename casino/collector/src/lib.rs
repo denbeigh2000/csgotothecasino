@@ -69,8 +69,9 @@ impl Collector {
     }
 
     async fn poll(&mut self) -> Result<(), CollectorError> {
-        log::info!("checking for new items");
+        log::debug!("checking for new items");
         let since = self.last_unboxing.as_ref();
+        log::debug!("last item timestamp: {since:?}");
         let last_item = self.last_known_item.as_ref();
         let mut new_items = self
             .steam_client
@@ -78,7 +79,7 @@ impl Collector {
             .await?;
 
         if new_items.is_empty() {
-            log::info!("no new items");
+            log::debug!("no new items");
             return Ok(());
         }
 
