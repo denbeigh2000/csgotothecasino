@@ -2,12 +2,9 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils/master";
-    rust-overlay = {
-      url = "github:oxalica/rust-overlay";
-      inputs = {
-        nixpkgs.follows = "nixpkgs";
-        flake-utils.follows = "flake-utils";
-      };
+    fenix = {
+      url = "github:nix-community/fenix";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
     naersk = {
       url = "github:nix-community/naersk";
@@ -22,16 +19,14 @@
     };
   };
 
-  outputs = { self, nixpkgs, flake-utils, rust-overlay, naersk, devshell }:
+  outputs = { self, nixpkgs, flake-utils, fenix, naersk, devshell }:
     rec {
       overlays.default = import ./overlay.nix { inherit naersk; };
       nixosModules = {
         casino = import ./casino/module.nix {
-          inherit rust-overlay;
           overlay = overlays.default;
         };
         viz = import ./viz/module.nix {
-          inherit rust-overlay;
           overlay = overlays.default;
         };
       };
@@ -40,8 +35,8 @@
         pkgs = import nixpkgs {
           inherit system;
           overlays = [
-            rust-overlay.overlays.default
             naersk.overlay
+            fenix.overlays.default
             devshell.overlay
             self.overlays.default
           ];
@@ -51,7 +46,7 @@
         devShells.default = pkgs.callPackage ./devshell.nix {};
 
         packages = rec {
-          inherit (pkgs.casino) aggregator bootstrap collector;
+          inherit (pkgs.casino) aggregator bootstrap collector bootstrap-windows collector-windows;
           inherit (pkgs) viz;
 
           default = pkgs.symlinkJoin {

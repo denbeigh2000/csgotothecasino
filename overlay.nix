@@ -2,18 +2,31 @@
 
 final: prev:
 let
-  rust-version = "1.65.0";
-  rust-toolchain = prev.rust-bin.stable."${rust-version}".default;
 
-  naersk' = prev.callPackage naersk {
+  inherit (builtins) attrNames trace;
+  inherit (prev) fenix callPackage nodejs-18_x yarn;
+  inherit (prev.stdenvNoCC.platform) system;
+
+  rust-toolchain =
+    let
+      inherit (fenix) combine targets;
+      inherit (fenix.stable) cargo rustc;
+    in
+    combine [
+      cargo
+      rustc
+      targets.x86_64-pc-windows-gnu.stable.rust-std
+    ];
+
+  naersk' = callPackage naersk {
     cargo = rust-toolchain;
     rustc = rust-toolchain;
   };
 
-  node-tools = with prev; [ nodejs-18_x yarn ];
+  node-tools = [ nodejs-18_x yarn ];
 
-  casino = prev.callPackage ./casino { inherit (naersk') buildPackage; };
-  viz = prev.callPackage ./viz { };
+  casino = callPackage ./casino { inherit (naersk') buildPackage; };
+  viz = callPackage ./viz { };
 in
 {
   inherit casino viz node-tools rust-toolchain;

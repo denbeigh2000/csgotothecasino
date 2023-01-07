@@ -1,4 +1,4 @@
-{ overlay, rust-overlay }:
+{ overlay }:
 { config, pkgs, lib, ... }:
 let
   cfg = config.casino.frontend;
@@ -24,7 +24,7 @@ in
     };
 
   config = lib.mkIf cfg.enable {
-    nixpkgs.overlays = [ rust-overlay.overlays.default overlay ];
+    nixpkgs.overlays = [ overlay ];
 
     services.nginx = {
       enable = true;

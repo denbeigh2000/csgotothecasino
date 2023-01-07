@@ -1,26 +1,62 @@
 { buildPackage
 , writeScriptBin
-, stdenv
 , pkg-config
 , openssl
+, stdenvNoCC
+, pkgsCross
 }:
 
 let
   version = "0.0.1";
-  group = buildPackage {
-    pname = "casino";
+  common = {
     inherit version;
 
     src = ./.;
     root = ./.;
-
-    nativeBuildInputs = [ pkg-config openssl ];
   };
 
-  mkBinary = name: writeScriptBin name "${group}/bin/${name} $@";
+  default = buildPackage (common // {
+    name = "casino";
+
+    nativeBuildInputs = [ pkg-config openssl ];
+  });
+
+  win = buildPackage (common // {
+    name = "casino-windows";
+    strictDeps = true;
+    doCheck = false;
+
+    CARGO_BUILD_TARGET = "x86_64-pc-windows-gnu";
+
+    depsBuildBuild = with pkgsCross.mingwW64; [
+      stdenv.cc
+      windows.pthreads
+    ];
+
+    nativeBuildInputs = with pkgsCross.mingwW64; [
+      pkg-config
+      openssl
+    ];
+  });
+
+  mkBinary = { group, name, suffix ? "" }:
+    stdenvNoCC.mkDerivation {
+      inherit name;
+      inherit version;
+
+      phases = [ "installPhase" ];
+      src = group;
+
+      installPhase = ''
+        mkdir -p $out/bin
+        ln -s $src/bin/${name}${suffix} $out/bin/${name}${suffix}
+      '';
+    };
 in
 {
-  aggregator = mkBinary "aggregator";
-  bootstrap = mkBinary "bootstrap";
-  collector = mkBinary "collector";
+  aggregator = mkBinary { group = default; name = "aggregator"; };
+  bootstrap = mkBinary { group = default; name = "bootstrap"; };
+  collector = mkBinary { group = default; name = "collector"; };
+  collector-windows = mkBinary { group = win; name = "collector"; suffix = ".exe"; };
+  bootstrap-windows = mkBinary { group = win; name = "bootstrap"; suffix = ".exe"; };
 }
