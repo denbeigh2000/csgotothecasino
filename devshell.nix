@@ -1,8 +1,11 @@
 { devshell
 , node-tools
-, rust-toolchain
+, rust-toolchain-dev
 , redis
 , nodejs-18_x
+, openssl
+, pkg-config
+, stdenv
 , tmux
 , yarn2nix-moretea
 , websocat
@@ -27,7 +30,7 @@ let
   '');
 
   runRust = name: target: (runInSubdir name "casino" ''
-    ${rust-toolchain}/bin/cargo run --bin ${target} -- "$@"
+    ${rust-toolchain-dev}/bin/cargo run --bin ${target} -- "$@"
   '');
 
   serve-backend = runRust "serve-backend" "aggregator";
@@ -35,7 +38,7 @@ let
   run-bootstrap = runRust "run-bootstrap" "bootstrap";
 
   run-tests = runInSubdir "run-tests" "casino" ''
-    ${rust-toolchain}/bin/cargo test "$@"
+    ${rust-toolchain-dev}/bin/cargo test "$@"
   '';
 
   serve-web = runInSubdir "serve-web" "viz" ''
@@ -90,7 +93,10 @@ devshell.mkShell {
   ];
   env = [
     { name = "ENV"; value = "dev"; }
+    { name = "OPENSSL_DIR"; value = "${openssl.bin}/bin"; }
+    { name = "OPENSSL_LIB_DIR"; value = "${openssl.out}/lib"; }
+    { name = "OPENSSL_INCLUDE_DIR"; value = "${openssl.out.dev}/include"; }
   ];
 
-  packages = [ tmux redis rust-toolchain websocat ] ++ node-tools;
+  packages = [ pkg-config openssl openssl.dev stdenv.cc tmux redis rust-toolchain-dev websocat ] ++ node-tools;
 }
