@@ -56,7 +56,7 @@
         var ctx = document.getElementById("chart").getContext("2d");
         const host = window.location.host;
         const wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
-        const pathPrefix = "/api";
+        const pathPrefix = window.location.protocol === "https:" ? "/api" : "";
         const apiUrl = `//${window.location.host}${pathPrefix}/`;
         const httpApiUrl = `${window.location.protocol}${apiUrl}`;
         const wsApiUrl = `${wsProto}${apiUrl}/stream`;
