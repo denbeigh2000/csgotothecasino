@@ -70,7 +70,7 @@ devshell.mkShell {
       name = "serve-backend";
       help = "Serve back-end server";
       category = "backend";
-      command = "${serve-backend}/bin/serve-backend $@";
+      command = "${serve-backend}/bin/serve-backend --redis-url='redis://localhost:6379' $@";
     }
     {
       name = "run-collector";
