@@ -59,10 +59,14 @@ const makeRow = (item) => {
   );
   unboxer.innerText = `Unboxed by `;
   unboxer.appendChild(unboxer_name);
+  const price = document.createElement("p");
+    price.innerText = `$${(item.item_value.lowest_price || item.item_value.median_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD` ;
+  
   img.setAttribute("src", image_url);
   div.appendChild(img);
   textDiv.appendChild(name);
   textDiv.appendChild(unboxer);
+    textDiv.appendChild(price);
   div.appendChild(textDiv);
   return div;
 };

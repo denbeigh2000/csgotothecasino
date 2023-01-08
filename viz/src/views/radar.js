@@ -16,7 +16,7 @@ window.createRadarChart = (data) => {
   };
 
   const groups = new Set();
-  data.forEach((d) => groups.add(d.name));
+  Object.values(Players).forEach((d) => groups.add(d));
 
   for (group of groups.keys()) {
     const grouped = data.filter(player_filter(group));
@@ -73,5 +73,11 @@ window.createRadarChart = (data) => {
     data: data_radar,
   };
 
-  return { config };
+  const update = (chart, event) => {
+    const id = (Object.values(Players).indexOf(event.name));
+    data_radar.datasets[id].data[event.item.rarity - 1]++;
+    chart.update();
+  };
+
+  return { config, update };
 };
