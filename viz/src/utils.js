@@ -25,19 +25,19 @@ const Names = {
   Thomas: "Thomas ",
 };
 const Players = {
-  FrankDaTank159: Names.Frank,
-  badcop_: Names.Sarah,
   denbeigh2000: Names.Denbeigh,
   brimonk: Names.Brian,
+  badcop_: Names.Sarah,
   Thomas: Names.Thomas,
+  FrankDaTank159: Names.Frank,
 };
 
 const PlayerColors = {
-  [Names.Frank]: "#E0E722",
-  [Names.Sarah]: "#4499ff",
   [Names.Denbeigh]: "#e055e0",
   [Names.Brian]: "#ff6700",
+  [Names.Sarah]: "#4499ff",
   [Names.Thomas]: "#33e033",
+  [Names.Frank]: "#e0e722",
 };
 
 const makeRow = (item) => {
@@ -60,13 +60,13 @@ const makeRow = (item) => {
   unboxer.innerText = `Unboxed by `;
   unboxer.appendChild(unboxer_name);
   const price = document.createElement("p");
-    price.innerText = `$${(item.item_value.lowest_price || item.item_value.median_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD` ;
-  
+  price.innerText = `$${(item.item_value.lowest_price || item.item_value.median_price || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`;
+
   img.setAttribute("src", image_url);
   div.appendChild(img);
   textDiv.appendChild(name);
   textDiv.appendChild(unboxer);
-    textDiv.appendChild(price);
+  textDiv.appendChild(price);
   div.appendChild(textDiv);
   return div;
 };

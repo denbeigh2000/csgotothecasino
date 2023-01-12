@@ -1,5 +1,5 @@
 window.createTimeseriesChart = (data) => {
-  document.body.style.backgroundColor = "#222";
+  //document.body.style.backgroundColor = "#222";
   groups = new Set();
   const grouped = {};
   data.forEach((d) => groups.add(d.name));
@@ -136,7 +136,7 @@ window.createTimeseriesChart = (data) => {
               if (ctx.tick.value === 0) {
                 return "#602020";
               }
-              return "#1e1e1e";
+              return "#1e1e1e00";
             },
           },
           ticks: {

@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html>
+<meta charset="utf-8" />
+
+<head>
+  <style>
+    .player {
+      width: 128px;
+      height: 116px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      color: white;
+      font-family: 'Hack NF';
+      font-size: 16pt;
+      box-shadow: 0px 0px 16px 2px rgba(0, 0, 0, 0.4);
+    }
+
+    .spin0 {
+      animation: spin0 4s forwards cubic-bezier(.04, .66, .31, 1.00);
+    }
+
+    .spin1 {
+      animation: spin1 4.3s forwards cubic-bezier(.04, .66, .31, 1.00);
+    }
+
+    .spin2 {
+      animation: spin2 4.4s forwards cubic-bezier(.04, .66, .31, 1.00);
+    }
+
+    .spin3 {
+      animation: spin3 3.6s forwards cubic-bezier(.04, .66, .31, 1.05);
+    }
+
+    @keyframes spin0 {
+      from {
+        transform: translateX(0px);
+      }
+
+      to {
+        transform: translateX(-8050px);
+      }
+    }
+
+    @keyframes spin1 {
+      from {
+        transform: translateX(0px);
+      }
+
+      to {
+        transform: translateX(-8200px);
+      }
+    }
+
+    @keyframes spin2 {
+      from {
+        transform: translateX(0px);
+      }
+
+      to {
+        transform: translateX(-7900px);
+      }
+    }
+
+    @keyframes spin3 {
+      from {
+        transform: translateX(0px);
+      }
+
+      to {
+        transform: translateX(-7995px);
+      }
+    }
+
+    .roulette {
+      display: flex;
+      gap: 14px;
+      width: 100000px;
+      margin: 120px 0px;
+    }
+
+    .container {
+      width: 1280px;
+      overflow-x: hidden;
+      position: relative;
+      padding: 40px 0;
+    }
+
+    .indicator {
+      position: absolute;
+      z-index: 3;
+      top: 0;
+      left: 50%;
+      background-color: red;
+      width: 3px;
+      height: 70%;
+      margin-top: 105px;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="main">
+    <div class="container">
+      <div class="roulette" id="roulette-0">
+      </div>
+      <div class="roulette" id="roulette-1">
+      </div>
+      <div class="indicator"></div>
+    </div>
+  </div>
+
+  <script src="./utils.js"></script>
+
+  <script>
+    function shuffleArray(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+    }
+    function darken(hexColor, magnitude) {
+      hexColor = hexColor.replace(`#`, ``);
+      if (hexColor.length === 6) {
+        const decimalColor = parseInt(hexColor, 16);
+        let r = (decimalColor >> 16) + magnitude;
+        r > 255 && (r = 255);
+        r < 0 && (r = 0);
+        let g = (decimalColor & 0x0000ff) + magnitude;
+        g > 255 && (g = 255);
+        g < 0 && (g = 0);
+        let b = ((decimalColor >> 8) & 0x00ff) + magnitude;
+        b > 255 && (b = 255);
+        b < 0 && (b = 0);
+        return `#${(g | (b << 8) | (r << 16)).toString(16)}`;
+      } else {
+        return hexColor;
+      }
+    };
+
+    (async function () {
+      let avoid;
+      let winner_names = [null, null];
+      const roll = (r_idx) => {
+        const dank_array = Array(15).fill(Object.values(Players)).flat();
+
+        const spindex = Math.floor(Math.random() * 4);
+        console.log(spindex);
+
+        let winner = avoid;
+        while (winner === avoid) {
+          shuffleArray(dank_array);
+          const dists = [8000, 8100, 7800, 7800];
+          const dist = Math.floor((dists[spindex] + 640) / 142) + 1;
+          winner = dank_array[dist];
+        }
+        avoid = winner;
+        winner_names[r_idx] = winner;
+        console.log(winner);
+        dank_array.forEach(name => {
+          const child = document.createElement("div");
+          child.classList.add("player");
+          child.innerText = name.trim().toUpperCase();
+          child.style = `border-bottom: solid 12px ${PlayerColors[name]}; background: linear-gradient(to bottom, rgba(180, 180, 180, 0.5) 70%, ${darken(PlayerColors[name], -35)} 150%);`;
+          document.querySelector(`#roulette-${r_idx}`).appendChild(child);
+        });
+        setTimeout(() => document.querySelector(`#roulette-${r_idx}`).classList.add(`spin${spindex}`), r_idx * 200 + 4000);
+      }
+      roll(0);
+      roll(1);
+
+      // what the fuck is this BGR nonsense OBS? c'monnnnn
+      const colorConvert = (str) => {
+        const r = parseInt(str[0] + str[1], 16);
+        const g = parseInt(str[2] + str[3], 16);
+        const b = parseInt(str[4] + str[5], 16);
+        return (b << 16) + (g << 8) + r;
+      }
+
+      let sourceIds = {};
+      function openSocket() {
+        const socket = new WebSocket("ws://localhost:8811");
+        socket.addEventListener("open", () => {
+          console.log("websocket opened");
+          socket.send(JSON.stringify(
+            {
+              "op": 1,
+              "d": {
+                "rpcVersion": 1,
+                "eventSubscriptions": 0,
+              }
+            }
+          ));
+          socket.send(JSON.stringify({
+            "op": 6,
+            "d": {
+              "requestId": Math.random().toString(),
+              "requestType": "SetSourceFilterSettings",
+              "requestData": {
+                "sourceName": "BorderLeft",
+                "filterName": "Color Correction",
+                "filterSettings": {
+                  "color_multiply": colorConvert(PlayerColors[winner_names[0]].slice(1)),
+                }
+              }
+            }
+          }));
+          socket.send(JSON.stringify({
+            "op": 6,
+            "d": {
+              "requestId": Math.random().toString(),
+              "requestType": "SetSourceFilterSettings",
+              "requestData": {
+                "sourceName": "BorderRight",
+                "filterName": "Color Correction",
+                "filterSettings": {
+                  "color_multiply": colorConvert(PlayerColors[winner_names[1]].slice(1)),
+                }
+              }
+            }
+          }));
+          Object.values(Players).map(e => e.trim()).forEach(p => {
+            socket.send(JSON.stringify({
+              "op": 6,
+              "d": {
+                "requestId": "where-is-" + p,
+                "requestType": "GetSceneItemId",
+                "requestData": {
+                  "sceneName": "Face Off",
+                  "sourceName": p,
+                }
+              }
+            }));
+          })
+          // Change scenes at the end
+          setTimeout(() =>
+            socket.send(JSON.stringify(
+              {
+                "op": 6,
+                "d": {
+                  "requestType": "SetCurrentProgramScene",
+                  "requestId": Math.random().toString(),
+                  "requestData": {
+                    "sceneName": "Face Off"
+                  }
+                }
+              }
+            )), 9000);
+        });
+        socket.addEventListener("message", async (e) => {
+          const data = JSON.parse(e.data);
+          // console.warn(data);
+          if (data.op === 7 && data.d.requestId.startsWith("where-is-")) {
+            sourceIds[data.d.requestId.split('-')[2]] = data.d.responseData.sceneItemId;
+            if (Object.keys(Players).length === Object.keys(sourceIds).length) {
+              // Time to start causing chaos
+              Object.entries(sourceIds).forEach(([p, id]) => {
+                socket.send(JSON.stringify({
+                  "op": 6,
+                  "d": {
+                    "requestId": "move-" + p,
+                    "requestType": "SetSceneItemTransform",
+                    "requestData": {
+                      "sceneName": "Face Off",
+                      "sceneItemId": id,
+                      "sceneItemTransform": {
+                        "positionX": winner_names[1].trim() === p ? 960 : 0,
+                      }
+                    }
+                  }
+                }));
+                socket.send(JSON.stringify({
+                  "op": 6,
+                  "d": {
+                    "requestId": "move-" + p,
+                    "requestType": "SetSceneItemEnabled",
+                    "requestData": {
+                      "sceneName": "Face Off",
+                      "sceneItemId": id,
+                      "sceneItemEnabled": winner_names.includes(p + " ")
+                    }
+                  }
+                }));
+              })
+            }
+          } else {
+            console.warn(data);
+          }
+        });
+      }
+      setTimeout(openSocket, 1000);
+    })();
+  </script>
+</body>
+
+</html>

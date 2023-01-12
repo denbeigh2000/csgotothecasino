@@ -1,5 +1,5 @@
 window.createRadarChart = (data) => {
-  document.body.style.backgroundColor = "#222";
+  // document.body.style.backgroundColor = "#222";
   const wear_filter = (wear_name) => (ev) => ev.item.wear_name === wear_name;
 
   const player_filter = (player_name) => (ev) => ev.name === player_name;

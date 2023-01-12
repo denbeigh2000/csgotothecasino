@@ -1,125 +1,138 @@
 <!DOCTYPE html>
 <html>
-  <meta charset="utf-8" />
-  <head>
-    <style>
-      .item-row {
-        display: flex;
-        font-family: Verdana;
-        color: #999;
+<meta charset="utf-8" />
+
+<head>
+  <style>
+    .item-row {
+      display: flex;
+      font-family: Verdana;
+      color: #999;
+    }
+
+    .item-info p {
+      margin: 2px;
+    }
+
+    .item-info {
+      display: flex;
+      flex-direction: column;
+      align-content: stretch;
+      justify-content: center;
+    }
+
+    .item-row img {
+      height: 96px;
+      padding-right: 12px;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="main">
+    <canvas id="chart"></canvas>
+  </div>
+
+  <script
+    src="https://cdn.jsdelivr.net/combine/npm/moment@2.29.1,npm/chart.js@3.7.0,npm/chartjs-adapter-moment@1.0.0,npm/chartjs-plugin-zoom@1.2.0,npm/chartjs-plugin-streaming@2.0.0"></script>
+  <script src="./utils.js"></script>
+  <script src="./websocket_test.js"></script>
+  <script src="./views/timeseries.js"></script>
+  <script src="./views/donut.js"></script>
+  <script src="./views/most_expensive.js"></script>
+  <script src="./views/table.js"></script>
+  <script src="./views/radar.js"></script>
+
+  <script>
+    /*
+      Controls whether mock data flows down the websocket or not.
+      TODO: DISABLE THIS BEFORE PRODUCTIONIZING
+    */
+    const DEBUG = false;
+
+    /*
+      hello reader! this file is the entrypoint to the viz. By default, the timeseries view will show.
+      The relevant code for this view is in 'views/timeseries.js'.
+
+      To show a different view instead, navigate to "#{view}" in browser (e.g. http://localhost:7007/viz/#donut )
+      if it doesn't work, try a refresh. Hashes are wonky
+    */
+    (async function () {
+      var ctx = document.getElementById("chart").getContext("2d");
+      const host = window.location.host;
+      const wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const pathPrefix = window.location.protocol === "https:" ? "/api" : "";
+      const apiUrl = `//${window.location.host}${pathPrefix}/`;
+      const httpApiUrl = `${window.location.protocol}${apiUrl}`;
+      const wsApiUrl = `${wsProto}${apiUrl}/stream`;
+
+      const res = await window.fetch(httpApiUrl);
+      let data = await res.json();
+      // uncomment to piss denbeigh off
+      //data.sort((a, b) => new Date(b.at) - new Date(a.at));
+      data.reverse();
+
+      const words = (window.location.hash || "timeseries").replace("#", "").split('-');
+      const word = words[0];
+      const filtered = words.length > 1 ? words[1] : undefined;
+      console.warn({ filtered });
+
+      data = data
+        // Crop our data to a 12 hour window.
+        .filter(fresh(moment(), 12, "hours"))
+        .filter(a => (!filtered || filtered === a.name))
+        .map((a) => ({
+          ...a,
+          name: Players[a.name] || a.name,
+        }));
+
+      console.log(data);
+
+      const func =
+        "create" + (word.charAt(0).toUpperCase() + word.slice(1)) + "Chart";
+      const { config, update, init } = window[func](data);
+      if (config) {
+        var chart = new Chart(ctx, config);
       }
-      .item-info p {
-        margin: 2px;
+      if (init) {
+        init();
       }
-      .item-info {
-        display: flex;
-        flex-direction: column;
-        align-content: stretch;
-        justify-content: center;
+
+      if (update && DEBUG) {
+        Object.entries(Players).forEach(([username, player]) => {
+          if (filtered && username !== filtered) return;
+          testWebsocket_FAKE_DATA(player)(chart, update);
+        });
       }
-      .item-row img {
-        height: 96px;
-        padding-right: 12px;
+
+      function openSocket() {
+        const socket = new WebSocket(wsApiUrl);
+        socket.addEventListener("open", () => {
+          console.log("websocket opened");
+          window.setInterval(() => {
+            socket.send("ping");
+          }, 15 * 1000);
+        });
+        socket.addEventListener("message", async (e) => {
+          const server_text = await e.data.text();
+          console.warn(server_text);
+          const parsed = JSON.parse(server_text);
+          if (update && (!filtered || filtered === parsed.name))
+            update(chart, {
+              ...parsed,
+              name: Players[parsed.name] || parsed.name,
+            });
+        });
+        socket.addEventListener("close", () => {
+          console.error(
+            "SOCKET CLOSED - ATTEMPTING RECONNECT (waiting 2 sec)"
+          );
+          window.setTimeout(openSocket, 2000);
+        });
       }
-    </style>
-  </head>
+      openSocket();
+    })();
+  </script>
+</body>
 
-  <body>
-    <div id="main">
-      <canvas id="chart"></canvas>
-    </div>
-
-    <script src="https://cdn.jsdelivr.net/combine/npm/moment@2.29.1,npm/chart.js@3.7.0,npm/chartjs-adapter-moment@1.0.0,npm/chartjs-plugin-zoom@1.2.0,npm/chartjs-plugin-streaming@2.0.0"></script>
-    <script src="./utils.js"></script>
-    <script src="./websocket_test.js"></script>
-    <script src="./views/timeseries.js"></script>
-    <script src="./views/donut.js"></script>
-    <script src="./views/most_expensive.js"></script>
-    <script src="./views/table.js"></script>
-    <script src="./views/radar.js"></script>
-
-    <script>
-      /*
-        Controls whether mock data flows down the websocket or not.
-        TODO: DISABLE THIS BEFORE PRODUCTIONIZING
-      */
-      const DEBUG = false;
-
-      /*
-        hello reader! this file is the entrypoint to the viz. By default, the timeseries view will show.
-        The relevant code for this view is in 'views/timeseries.js'.
-
-        To show a different view instead, navigate to "#{view}" in browser (e.g. http://localhost:7007/viz/#donut )
-        if it doesn't work, try a refresh. Hashes are wonky
-      */
-      (async function () {
-        var ctx = document.getElementById("chart").getContext("2d");
-        const host = window.location.host;
-        const wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
-        const pathPrefix = window.location.protocol === "https:" ? "/api" : "";
-        const apiUrl = `//${window.location.host}${pathPrefix}/`;
-        const httpApiUrl = `${window.location.protocol}${apiUrl}`;
-        const wsApiUrl = `${wsProto}${apiUrl}/stream`;
-
-        const res = await window.fetch(httpApiUrl);
-        let data = await res.json();
-        // uncomment to piss denbeigh off
-        //data.sort((a, b) => new Date(b.at) - new Date(a.at));
-        data.reverse();
-        data = data
-          // Crop our data to a 12 hour window.
-          .filter(fresh(moment(), 12, "hours"))
-          .map((a) => ({
-            ...a,
-            name: Players[a.name] || a.name,
-          }));
-
-        console.log(data);
-
-        const word = (window.location.hash || "timeseries").replace("#", "");
-        const func =
-          "create" + (word.charAt(0).toUpperCase() + word.slice(1)) + "Chart";
-        const { config, update, init } = window[func](data);
-        if (config) {
-          var chart = new Chart(ctx, config);
-        }
-        if (init) {
-          init();
-        }
-
-        if (update && DEBUG) {
-          Object.entries(Players).forEach(([username, player]) => {
-            testWebsocket_FAKE_DATA(player)(chart, update);
-          });
-        }
-
-        function openSocket() {
-          const socket = new WebSocket(wsApiUrl);
-          socket.addEventListener("open", () => {
-            console.log("websocket opened");
-            window.setInterval(() => {
-              socket.send("ping");
-            }, 15 * 1000);
-          });
-          socket.addEventListener("message", async (e) => {
-            const server_text = await e.data.text();
-            console.warn(server_text);
-            const parsed = JSON.parse(server_text);
-            if (update)
-              update(chart, {
-                ...parsed,
-                name: Players[parsed.name] || parsed.name,
-              });
-          });
-          socket.addEventListener("close", () => {
-            console.error(
-              "SOCKET CLOSED - ATTEMPTING RECONNECT (waiting 2 sec)"
-            );
-            window.setTimeout(openSocket, 2000);
-          });
-        }
-        openSocket();
-      })();
-    </script>
-  </body>
 </html>
