@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <script type="text/javascript">
+            document.addEventListener('DOMContentLoaded', () => {
+
+            const target = document.getElementById('target');
+            const source = document.createElement('canvas');
+            source.width = 480;
+            source.height = 270;
+            const ctx = source.getContext('2d');
+            ctx.font = "300px Arial";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            
+            var audio = new Audio("https://drive.google.com/u/0/uc?id=1W2LpqXGKTc4gP3Vj3wB8bJb8U4-G6oSA&export=download");
+            audio.volume = 0.5;
+            
+            var t = new Date(Date.now() - 10000);
+            
+            anim();
+
+            const stream = source.captureStream();
+            target.srcObject = stream;
+            
+            const countdown = () => {
+                t = new Date(Date.now() + 3000);
+                audio.play();
+            }
+            const btnTest = document.getElementById('btn-test');
+            btnTest.onclick = e => countdown();
+            const btn = document.getElementById('btn');
+            if (target.requestPictureInPicture) {
+                btn.onclick = e => target.requestPictureInPicture();
+            }
+            else {
+                btn.disabled = true;
+            }
+            
+            function openSocket() {
+                const socket = new WebSocket("ws://localhost:7000/sync");
+                socket.addEventListener('open', (e) => {
+                    console.log("Connected to sync server");
+                });
+                socket.addEventListener('message', (e) => {
+                    const data = JSON.parse(e.data);
+                    const delay = data.delays[window.location.hash.slice(1)] || 0;
+                    setTimeout(countdown, delay);
+                });
+                socket.addEventListener('close', (e) => {
+                    console.error("SOCKET CLOSED, RECONNECTING...");
+                    setTimeout(openSocket, 1000);
+                })
+            }
+            openSocket();
+            
+            function anim() {
+                let t_gap = Math.floor((t.getTime() - (new Date()).getTime()) / 1000) + 1;
+                let clamped = Math.max(t_gap, 0);
+                ctx.fillStyle = "aqua";
+                if (t_gap < -2) ctx.fillStyle = "red";
+                else if (!clamped) ctx.fillStyle = "lime";
+                ctx.fillRect(0, 0, source.width, source.height);
+                ctx.fillStyle = "black";
+                if (clamped)
+                ctx.fillText(t_gap.toString(), source.width / 2, source.height / 2 + 20);
+                requestAnimationFrame(anim);
+            }
+        });
+            </script>
+            </head>
+            <body>
+                <button id="btn">Pop out</button>
+                <button id="btn-test">Test</button>
+                <br>
+                <video id="target" muted autoplay width="480" height="270" autoPictureInPicture></video>
+                
+                </body>
+                </html>

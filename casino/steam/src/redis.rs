@@ -54,7 +54,7 @@ impl ToRedisArgs for Unlock {
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct CountdownRequest {
-    pub delays: std::collections::HashMap<String, f32>,
+    pub delays: std::collections::HashMap<String, u32>,
 }
 
 impl FromRedisValue for CountdownRequest {
