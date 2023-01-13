@@ -14,8 +14,6 @@ use steam::{UnhydratedUnlock, Unlock};
 
 type Result<T> = std::result::Result<T, StoreError>;
 
-const EVENT_KEY: &str = "new_events";
-
 /// Persists information about our application state.
 pub struct Store {
     client: Client,
@@ -49,7 +47,6 @@ impl From<RunError<RedisError>> for StoreError {
         }
     }
 }
-
 
 impl Store {
     pub async fn new<T: IntoConnectionInfo>(i: T) -> Result<Self> {
@@ -106,16 +103,23 @@ impl Store {
         Ok(())
     }
 
-    pub async fn publish(&self, entry: &Unlock) -> Result<()> {
+    pub async fn publish<T: redis::ToRedisArgs + std::marker::Sync>(
+        &self,
+        topic: &str,
+        entry: &T,
+    ) -> Result<()> {
         let mut conn = self.get_conn().await?;
-        let _res: () = conn.publish(EVENT_KEY, entry).await?;
+        let _res: () = conn.publish(topic, entry).await?;
 
         Ok(())
     }
 
-    pub async fn get_event_stream(&self) -> Result<impl Stream<Item = Unlock>> {
+    pub async fn get_event_stream<T: serde::de::DeserializeOwned>(
+        &self,
+        topic: &str,
+    ) -> Result<impl Stream<Item = T>> {
         let mut conn = self.make_conn().await?.into_pubsub();
-        conn.subscribe(EVENT_KEY).await?;
+        conn.subscribe(topic).await?;
 
         let stream = conn.into_on_message().filter_map(|msg| async move {
             let raw_data: String = match msg.get_payload() {

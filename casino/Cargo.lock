@@ -1905,6 +1905,7 @@ dependencies = [
  "futures-util",
  "log",
  "redis",
+ "serde",
  "serde_json",
  "steam",
  "thiserror",

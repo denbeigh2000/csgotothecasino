@@ -11,9 +11,9 @@ pub enum MessageSendError {
     Transport(#[from] axum::Error),
 }
 
-pub async fn handle_emit(
+pub async fn handle_emit<T: serde::ser::Serialize>(
     socket: &mut WebSocket,
-    unlock: Unlock,
+    unlock: T,
 ) -> Result<(), MessageSendError> {
     let encoded = serde_json::to_vec(&unlock)?;
     let msg = Message::Binary(encoded);

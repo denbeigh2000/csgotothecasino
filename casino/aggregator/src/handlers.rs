@@ -14,8 +14,11 @@ use super::keystore::KeyStore;
 use super::websocket::{handle_emit, handle_recv, MessageSendError};
 use csgofloat::{CsgoFloatClient, CsgoFloatFetchError};
 use steam::errors::MarketPriceFetchError;
-use steam::{MarketPriceClient, UnhydratedUnlock, Unlock};
+use steam::{CountdownRequest, MarketPriceClient, UnhydratedUnlock, Unlock};
 use store::{Store, StoreError};
+
+const UNLOCK_EVENT_KEY: &str = "new_events";
+const SYNC_EVENT_KEY: &str = "new_sync_events";
 
 #[derive(Debug, Error)]
 pub enum HandlerError {
@@ -174,7 +177,7 @@ impl Handler {
                 .await
                 .map_err(SaveItemsError::SavingItem)?;
             self.store
-                .publish(&hydrated)
+                .publish(UNLOCK_EVENT_KEY, &hydrated)
                 .await
                 .map_err(SaveItemsError::PublishingItem)?;
         }
@@ -222,7 +225,15 @@ impl Handler {
     }
 
     pub async fn event_stream(&self) -> Result<impl Stream<Item = Unlock>, StreamError> {
-        let stream = self.store.get_event_stream().await?;
+        let stream = self.store.get_event_stream(UNLOCK_EVENT_KEY).await?;
+
+        Ok(stream)
+    }
+
+    pub async fn sync_event_stream(
+        &self,
+    ) -> Result<impl Stream<Item = CountdownRequest>, StreamError> {
+        let stream = self.store.get_event_stream(SYNC_EVENT_KEY).await?;
 
         Ok(stream)
     }
@@ -243,14 +254,50 @@ pub async fn handle_upload(
     state.save(key, body).await
 }
 
+pub async fn handle_countdown_request(
+    State(state): State<Arc<Handler>>,
+    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+    Json(body): Json<steam::CountdownRequest>,
+) -> Result<(), SaveItemsError> {
+    let key = auth.0.token();
+    let name = state
+        .key_store
+        .get_user(key)
+        .ok_or(SaveItemsError::BadKey)?;
+
+    if name != "badcop_" {
+        return Err(SaveItemsError::BadKey);
+    }
+    state
+        .store
+        .publish(SYNC_EVENT_KEY, &body)
+        .await
+        .map_err(SaveItemsError::PublishingItem)?;
+    Ok(())
+}
+
 pub async fn handle_websocket(
     State(state): State<Arc<Handler>>,
     ws: WebSocketUpgrade,
 ) -> impl IntoResponse {
-    let stream = state.event_stream().await.map(Box::pin).unwrap();
     ws.on_upgrade(|socket| async move {
-        if let Err(e) = handle_upgraded_websocket(stream, socket).await {
-            log::error!("error serving websocket: {e}");
+        if let Ok(stream) = state.event_stream().await.map(Box::pin) {
+            if let Err(e) = handle_upgraded_websocket(stream, socket).await {
+                log::error!("error serving websocket: {e}");
+            }
+        }
+    })
+}
+
+pub async fn handle_sync_websocket(
+    State(state): State<Arc<Handler>>,
+    ws: WebSocketUpgrade,
+) -> impl IntoResponse {
+    ws.on_upgrade(|socket| async move {
+        if let Ok(stream) = state.sync_event_stream().await.map(Box::pin) {
+            if let Err(e) = handle_upgraded_websocket(stream, socket).await {
+                log::error!("error serving websocket: {e}");
+            }
         }
     })
 }
@@ -263,7 +310,7 @@ enum WebsocketServingError {
     Sending(axum::Error),
 }
 
-async fn handle_upgraded_websocket<S: Stream<Item = Unlock> + Unpin>(
+async fn handle_upgraded_websocket<T: serde::Serialize, S: Stream<Item = T> + Unpin>(
     mut stream: S,
     mut ws: WebSocket,
 ) -> Result<(), WebsocketServingError> {
