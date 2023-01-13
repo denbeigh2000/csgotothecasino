@@ -43,7 +43,15 @@ const wsProxy = createProxyMiddleware(`/${SERVICE_URL_PREFIX}stream`, {
   ws: true,
 });
 
+const wsSyncProxy = createProxyMiddleware(`/${SERVICE_URL_PREFIX}sync`, {
+  target: WS_SERVICE_URL,
+  changeOrigin: true,
+  logLevel: "debug",
+  ws: true,
+});
+
 app.use(`/${SERVICE_URL_PREFIX}stream`, wsProxy);
+app.use(`/${SERVICE_URL_PREFIX}sync`, wsSyncProxy);
 
 app.use("/viz", express.static("src"));
 app.use(`/${SERVICE_URL_PREFIX}`, proxy);
@@ -55,4 +63,5 @@ app
   .listen(PORT, HOST, () => {
     console.log(`Starting Proxy at ${HOST}:${PORT}`);
   })
-  .on("upgrade", wsProxy.upgrade); // <-- subscribe to http 'upgrade';
+  .on("upgrade", wsProxy.upgrade) // <-- subscribe to http 'upgrade';
+  .on("upgrade", wsSyncProxy.upgrade) // <-- subscribe to http 'upgrade';

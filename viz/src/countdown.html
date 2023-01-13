@@ -4,6 +4,13 @@
         <script type="text/javascript">
             document.addEventListener('DOMContentLoaded', () => {
 
+            const host = window.location.host;
+            const wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
+            const pathPrefix = window.location.protocol === "https:" ? "/api" : "";
+            const apiUrl = `//${window.location.host}${pathPrefix}/`;
+            const httpApiUrl = `${window.location.protocol}${apiUrl}`;
+            const wsApiUrl = `${wsProto}${apiUrl}sync`;
+
             const target = document.getElementById('target');
             const source = document.createElement('canvas');
             source.width = 480;
@@ -38,7 +45,7 @@
             }
             
             function openSocket() {
-                const socket = new WebSocket("ws://localhost:7000/sync");
+                const socket = new WebSocket(wsApiUrl);
                 socket.addEventListener('open', (e) => {
                     console.log("Connected to sync server");
                 });
