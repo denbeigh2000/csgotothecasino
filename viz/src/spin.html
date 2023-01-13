@@ -111,6 +111,7 @@
   </div>
 
   <script src="./utils.js"></script>
+  <script src="./all_done.js"></script>
 
   <script>
     function shuffleArray(array) {
@@ -142,7 +143,8 @@
       let avoid;
       let winner_names = [null, null];
       const roll = (r_idx) => {
-        const dank_array = Array(15).fill(Object.values(Players)).flat();
+        const less_dank_array = Object.values(Players).filter(p => !ALL_DONE.includes(p));
+        const dank_array = Array(Math.floor(20 * 5 / less_dank_array.length)).fill(less_dank_array).flat();
 
         const spindex = Math.floor(Math.random() * 4);
         console.log(spindex);
