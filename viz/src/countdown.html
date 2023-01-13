@@ -44,8 +44,10 @@
                 });
                 socket.addEventListener('message', (e) => {
                     const data = JSON.parse(e.data);
-                    const delay = data.delays[window.location.hash.slice(1)] || 0;
-                    setTimeout(countdown, delay);
+                    const delay = data.delays[window.location.hash.slice(1)];
+                    if (typeof delay !== "undefined") {
+                        setTimeout(countdown, delay);
+                    }
                 });
                 socket.addEventListener('close', (e) => {
                     console.error("SOCKET CLOSED, RECONNECTING...");

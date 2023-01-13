@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <style type="text/css">
+            div {
+                display: flex;
+                flex-direction: column;
+                margin: auto;
+                max-width: 800px;
+            }
+            body {
+                height: 100%;
+                height: 100%;
+            }
+            button {
+                height: 64px;
+            }
+            label {
+                font-size: 20px;
+                font-weight: bold;
+            }
+            span {
+                display: flex;
+                flex-direction: row;
+                gap: 8px;
+            }
+        </style>
+        <script type="text/javascript">
+            document.addEventListener("DOMContentLoaded", e => {
+
+                function triggerStreamEffects() {
+                    // TODO
+                }
+
+                document.querySelectorAll('input[type=range]').forEach(input => {
+                    input.value = localStorage.getItem(input.id) || 0;
+                    document.querySelector("#output-" + input.id).textContent = input.value;
+                    input.addEventListener('input', e => {
+                        document.querySelector("#output-"+e.target.id).textContent = e.target.value;
+                        localStorage.setItem(e.target.id, e.target.value);
+                    });
+                })
+
+                function getDelays() {
+                    const delays = {};
+                    document.querySelectorAll('input[type=range]').forEach(input => {
+                        if (document.querySelector("#check-" + input.id).checked) {
+
+                            delays[input.id] = parseInt(input.value);
+                        }
+                    })
+                    return delays;
+                }
+
+                document.querySelector("#btn").onclick = async function() {
+                    const delays = getDelays();
+                    const f = await fetch("http://localhost:7007/countdown", {
+                        method: "POST", 
+                        body: JSON.stringify({ delays }),
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': 'Bearer ' + window.location.hash.slice(1),
+                        }
+                    });
+                    setTimeout(triggerStreamEffects, delays.stream);
+                }
+            });
+            </script>
+            </head>
+            <body>
+                <div>
+                    <button id="btn">Countdown</button>
+                    <span><input type="checkbox" id="check-denbeigh">
+                    <label for="check-denbeigh">Denbeigh</label></span>
+                    <input type="range" id="denbeigh" min="0" max="10000" value="0">
+                    <p>Value: <output id="output-denbeigh"></output> ms</p>
+                    <span><input type="checkbox" id="check-brian">
+                    <label for="check-brian">Brian</label></span>
+                    <input type="range" id="brian" min="0" max="10000" value="0">
+                    <p>Value: <output id="output-brian"></output> ms</p>
+                    <span><input type="checkbox" id="check-sarah">
+                    <label for="check-sarah">Sarah</label></span>
+                    <input type="range" id="sarah" min="0" max="10000" value="0">
+                    <p>Value: <output id="output-sarah"></output> ms</p>
+                    <span><input type="checkbox" id="check-thomas">
+                    <label for="check-thomas">Thomas</label></span>
+                    <input type="range" id="thomas" min="0" max="10000" value="0">
+                    <p>Value: <output id="output-thomas"></output> ms</p>
+                    <span><input type="checkbox" id="check-frank">
+                    <label for="check-frank">Frank</label></span>
+                    <input type="range" id="frank" min="0" max="10000" value="0">
+                    <p>Value: <output id="output-frank"></output> ms</p>
+                    <span><input type="checkbox" id="check-stream">
+                    <label for="check-stream">Stream</label></span>
+                    <input type="range" id="stream" min="0" max="10000" value="0">
+                    <p>Value: <output id="output-stream"></output> ms</p>
+                </div>
+            </body>
+        </html>
