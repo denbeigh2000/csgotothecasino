@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use axum::extract::State;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
+use axum::extract::State;
 use axum::headers::Authorization;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
@@ -243,15 +243,16 @@ pub async fn handle_upload(
     state.save(key, body).await
 }
 
-pub async fn handle_websocket(State(state): State<Arc<Handler>>, ws: WebSocketUpgrade) -> Result<(), StreamError> {
-    let stream = state.event_stream().await.map(Box::pin)?;
+pub async fn handle_websocket(
+    State(state): State<Arc<Handler>>,
+    ws: WebSocketUpgrade,
+) -> impl IntoResponse {
+    let stream = state.event_stream().await.map(Box::pin).unwrap();
     ws.on_upgrade(|socket| async move {
         if let Err(e) = handle_upgraded_websocket(stream, socket).await {
             log::error!("error serving websocket: {e}");
         }
-    });
-
-    Ok(())
+    })
 }
 
 #[derive(Debug, Error)]
