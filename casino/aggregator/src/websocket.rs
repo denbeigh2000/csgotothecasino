@@ -1,8 +1,6 @@
 use axum::extract::ws::{Message, WebSocket};
 use thiserror::Error;
 
-use steam::Unlock;
-
 #[derive(Debug, Error)]
 pub enum MessageSendError {
     #[error("ser/deserialisation error: {0}")]
@@ -15,8 +13,8 @@ pub async fn handle_emit<T: serde::ser::Serialize>(
     socket: &mut WebSocket,
     unlock: T,
 ) -> Result<(), MessageSendError> {
-    let encoded = serde_json::to_vec(&unlock)?;
-    let msg = Message::Binary(encoded);
+    let encoded = serde_json::to_string(&unlock)?;
+    let msg = Message::Text(encoded);
     socket.send(msg).await?;
 
     Ok(())
