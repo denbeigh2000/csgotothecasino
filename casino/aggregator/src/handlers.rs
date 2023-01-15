@@ -109,6 +109,7 @@ pub struct Handler {
     key_store: KeyStore,
     csgofloat_client: CsgoFloatClient,
     market_price_client: MarketPriceClient,
+    countdown_admin: String,
 }
 
 impl Handler {
@@ -117,12 +118,14 @@ impl Handler {
         key_store: KeyStore,
         csgofloat_client: CsgoFloatClient,
         market_price_client: MarketPriceClient,
+        countdown_admin: String,
     ) -> Self {
         Self {
             store,
             key_store,
             csgofloat_client,
             market_price_client,
+            countdown_admin,
         }
     }
 
@@ -263,7 +266,7 @@ pub async fn handle_countdown_request(
         .get_user(key)
         .ok_or(SaveItemsError::BadKey)?;
 
-    if name != "badcop_" {
+    if name != state.countdown_admin {
         return Err(SaveItemsError::BadKey);
     }
     state

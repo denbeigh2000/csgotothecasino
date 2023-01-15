@@ -70,7 +70,7 @@ devshell.mkShell {
       name = "serve-backend";
       help = "Serve back-end server";
       category = "backend";
-      command = "${serve-backend}/bin/serve-backend --redis-url='redis://localhost:6379' $@";
+      command = "${serve-backend}/bin/serve-backend $@";
     }
     {
       name = "run-collector";
@@ -96,6 +96,8 @@ devshell.mkShell {
     { name = "OPENSSL_DIR"; value = "${openssl.bin}/bin"; }
     { name = "OPENSSL_LIB_DIR"; value = "${openssl.out}/lib"; }
     { name = "OPENSSL_INCLUDE_DIR"; value = "${openssl.out.dev}/include"; }
+    { name = "REDIS_URL"; value = "redis://localhost:6379"; }
+    { name = "COUNTDOWN_ADMIN"; value = "badcop_"; }
   ];
 
   packages = [ pkg-config openssl openssl.dev stdenv.cc tmux redis rust-toolchain-dev websocat ] ++ node-tools;

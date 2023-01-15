@@ -56,6 +56,9 @@ struct Args {
     /// Level to log at
     #[arg(short, long, env, default_value = "info")]
     log_level: log::LevelFilter,
+    /// Friendly name of the user who may trigger countdowns
+    #[arg(short, long, env)]
+    countdown_admin: String,
 }
 
 async fn real_main() -> Result<(), AggregatorError> {
@@ -68,7 +71,13 @@ async fn real_main() -> Result<(), AggregatorError> {
     let csgo_float = CsgoFloatClient::new(args.csgofloat_key, args.redis_url.clone()).await?;
     let market_price_client = MarketPriceClient::new(args.redis_url).await?;
 
-    let h = Handler::new(store, keystore, csgo_float, market_price_client);
+    let h = Handler::new(
+        store,
+        keystore,
+        csgo_float,
+        market_price_client,
+        args.countdown_admin,
+    );
 
     serve(&args.bind_addr, h).await?;
 
