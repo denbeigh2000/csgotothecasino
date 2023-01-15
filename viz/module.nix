@@ -43,6 +43,17 @@ in
       enable = true;
       virtualHosts."casino" = {
         serverName = cfg.domainName;
+        enableACME = true;
+        forceSSL = true;
+        acmeRoot = null;
+
+        listen = [
+          {
+            addr = "0.0.0.0";
+            port =  443;
+            ssl = true;
+          }
+        ];
 
         locations = {
           "/api" = {
