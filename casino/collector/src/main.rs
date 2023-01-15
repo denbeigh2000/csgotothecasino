@@ -2,10 +2,10 @@ use std::num::ParseIntError;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use collector::config::{Config, ConfigLoadError};
-use collector::{Collector, CollectorError, UrlParseError};
 use chrono::Utc;
 use clap::Parser;
+use collector::config::{Config, ConfigLoadError};
+use collector::{Collector, CollectorError, UrlParseError};
 use reqwest::Url;
 use steam::errors::AuthenticationCheckError;
 use steam::{CredentialParseError, Id, IdUrlParseError, SteamClient, SteamCredentials};
@@ -58,10 +58,16 @@ async fn main_result() -> Result<(), MainError> {
     let start = now - delta;
     let st = Some(start);
 
-    Collector::new(args.collection_url, client, cfg.pre_shared_key, *args.poll_interval, st)
-        .await?
-        .run()
-        .await?;
+    Collector::new(
+        args.collection_url,
+        client,
+        cfg.pre_shared_key,
+        *args.poll_interval,
+        st,
+    )
+    .await?
+    .run()
+    .await?;
 
     Ok(())
 }
@@ -84,7 +90,6 @@ enum MainError {
     RunningCollector(#[from] CollectorError),
 }
 
-
 #[derive(Debug, Error)]
 enum ClientPrepareError {
     #[error("io error: {0}")]
@@ -94,7 +99,6 @@ enum ClientPrepareError {
     #[error("error checking for authentication: {0}")]
     AuthCheck(#[from] AuthenticationCheckError),
 }
-
 
 async fn prepare_client(id: Id, creds_path: &Path) -> Result<SteamClient, ClientPrepareError> {
     if creds_path.exists() {

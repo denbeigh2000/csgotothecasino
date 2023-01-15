@@ -1,11 +1,11 @@
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
-use csgofloat::{CsgoFloatClient, CsgoFloatClientCreateError};
-use steam::{MarketPriceClient, MarketPriceClientCreateError};
-use store::{StoreError as StoreError, Store};
 use clap::Parser;
+use csgofloat::{CsgoFloatClient, CsgoFloatClientCreateError};
 use redis::ConnectionInfo;
+use steam::{MarketPriceClient, MarketPriceClientCreateError};
+use store::{Store, StoreError};
 use thiserror::Error;
 
 use aggregator::keystore::{KeyStore, KeyStoreLoadSaveError};
@@ -35,12 +35,12 @@ enum AggregatorError {
     #[error("error creating steam market price client: {0}")]
     CreatingMarketPriceClient(#[from] MarketPriceClientCreateError),
     #[error("error serving http: {0}")]
-    ServingHTTP(#[from] ServingError)
+    ServingHTTP(#[from] ServingError),
 }
 
 #[derive(Parser)]
 #[command(version)]
-struct Args  {
+struct Args {
     /// URL to connect to Redis with"
     #[arg(short, long, env, default_value = "redis://redis:6379")]
     redis_url: ConnectionInfo,

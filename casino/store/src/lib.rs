@@ -10,9 +10,13 @@ use bb8_redis::RedisConnectionManager;
 use futures_util::{Stream, StreamExt};
 use thiserror::Error;
 
+use countdown::CountdownRequest;
 use steam::{UnhydratedUnlock, Unlock};
 
 type Result<T> = std::result::Result<T, StoreError>;
+
+const UNLOCK_EVENT_KEY: &str = "new_unlock_events";
+const SYNC_EVENT_KEY: &str = "new_sync_events";
 
 /// Persists information about our application state.
 pub struct Store {
@@ -103,7 +107,15 @@ impl Store {
         Ok(())
     }
 
-    pub async fn publish<T: redis::ToRedisArgs + std::marker::Sync>(
+    pub async fn publish_unlock(&self, entry: &Unlock) -> Result<()> {
+        self.publish(UNLOCK_EVENT_KEY, entry).await
+    }
+
+    pub async fn start_countdown(&self, entry: &CountdownRequest) -> Result<()> {
+        self.publish(SYNC_EVENT_KEY, entry).await
+    }
+
+    async fn publish<T: redis::ToRedisArgs + std::marker::Sync>(
         &self,
         topic: &str,
         entry: &T,
@@ -114,7 +126,15 @@ impl Store {
         Ok(())
     }
 
-    pub async fn get_event_stream<T: serde::de::DeserializeOwned>(
+    pub async fn get_unlock_stream(&self) -> Result<impl Stream<Item = Unlock>> {
+        self.get_redis_stream(UNLOCK_EVENT_KEY).await
+    }
+
+    pub async fn get_sync_stream(&self) -> Result<impl Stream<Item = CountdownRequest>> {
+        self.get_redis_stream(SYNC_EVENT_KEY).await
+    }
+
+    async fn get_redis_stream<T: serde::de::DeserializeOwned>(
         &self,
         topic: &str,
     ) -> Result<impl Stream<Item = T>> {

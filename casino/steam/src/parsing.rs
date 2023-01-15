@@ -301,9 +301,7 @@ pub fn parse_raw_unlock(
         "%b %e, %Y %l:%M%P",
     )
     .map_err(|_| ParseFailure::DateFormattingChanged)?;
-    let datetime = Utc
-        .from_local_datetime(&datetime)
-        .unwrap();
+    let datetime = Utc.from_local_datetime(&datetime).unwrap();
 
     if since.map(|s| &datetime < s).unwrap_or(false) {
         // We have successfully started parsing a trade that is older than our threshold, return
@@ -336,7 +334,10 @@ pub fn parse_raw_unlock(
         .as_str();
 
     // TODO: Want to check to see if asset_id is monotonically increasing
-    if last_seen_inventory_id.map(|l| l == &inv_id).unwrap_or(false) {
+    if last_seen_inventory_id
+        .map(|l| l == &inv_id)
+        .unwrap_or(false)
+    {
         return Ok(ParseSuccess::TooOld);
     }
     let key = key_node.map(item_from_node).transpose()?;

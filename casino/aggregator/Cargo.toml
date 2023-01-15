@@ -27,6 +27,7 @@ serde_yaml = "0.9"
 thiserror = "1.0"
 tokio = { version = "1.21", features = ["fs", "io-std", "net", "rt-multi-thread", "process", "signal", "macros"] }
 
+countdown = { path = "../countdown" }
 csgofloat = { path = "../csgofloat" }
 logging = { path = "../logging" }
 steam = { path = "../steam", features = ["backend"] }

@@ -255,7 +255,7 @@ impl SteamClient {
                 ParseSuccess::WrongTransactionType => {
                     seen_any = true;
                     continue;
-                },
+                }
             }
         }
 

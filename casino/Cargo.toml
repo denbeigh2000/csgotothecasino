@@ -5,6 +5,7 @@ members = [
     "bootstrap",
     "cache",
     "collector",
+    "countdown",
     "csgofloat",
     "logging",
     "steam",

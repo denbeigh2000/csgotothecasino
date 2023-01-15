@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use bb8_redis::RedisConnectionManager;
-use bb8_redis::redis::IntoConnectionInfo;
 use bb8_redis::bb8::Pool;
+use bb8_redis::redis::IntoConnectionInfo;
 use bb8_redis::redis::RedisError;
+use bb8_redis::RedisConnectionManager;
 use cache::Cache;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};

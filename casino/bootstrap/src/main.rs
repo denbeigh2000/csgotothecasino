@@ -88,7 +88,9 @@ async fn inner_main() -> Result<(), BootstrapError> {
         Command::new(args.out_file.as_os_str())
             .arg(args.config_path.as_os_str())
             .spawn()?
-            .wait().await.unwrap();
+            .wait()
+            .await
+            .unwrap();
     }
 
     Ok(())

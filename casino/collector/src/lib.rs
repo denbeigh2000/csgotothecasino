@@ -1,8 +1,8 @@
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use reqwest::{Client, IntoUrl, Url};
 use reqwest::header::AUTHORIZATION;
+use reqwest::{Client, IntoUrl, Url};
 use tokio::time::interval;
 
 use steam::errors::FetchItemsError;
