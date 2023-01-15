@@ -13,7 +13,7 @@ in
 
         bindAddr = mkOption {
           type = str;
-          default = "localhost:7000";
+          default = "127.0.0.1:7000";
           description = "Address to bind service to";
         };
 
@@ -35,8 +35,14 @@ in
 
         logLevel = mkOption {
           type = str;
-          description = "Level to loge at";
+          description = "Level to log at";
           default = "info";
+        };
+
+        countdownAdmin = mkOption {
+          type = str;
+          description = "Friendly name of user authorised to start countdowns";
+          default = "badcop_";
         };
 
         package = mkOption {
@@ -66,6 +72,7 @@ in
         BIND_ADDR = cfg.bindAddr;
         KEYSTORE_PATH = cfg.keystorePath;
         LOG_LEVEL = cfg.logLevel;
+        COUNTDOWN_ADMIN = cfg.countdownAdmin;
       };
 
       serviceConfig = {
