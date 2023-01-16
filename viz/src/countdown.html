@@ -48,6 +48,9 @@
                 const socket = new WebSocket(wsApiUrl);
                 socket.addEventListener('open', (e) => {
                     console.log("Connected to sync server");
+                    window.setInterval(() => {
+                      socket.send("ping");
+                    }, 15 * 1000);
                 });
                 socket.addEventListener('message', (e) => {
                     const data = JSON.parse(e.data);
