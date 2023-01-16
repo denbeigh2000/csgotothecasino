@@ -1,5 +1,4 @@
 window.createExpensiveChart = (data) => {
-  document.body.style.backgroundColor = "#222";
 
   const mostExpensive = (arr) => {
     return arr
