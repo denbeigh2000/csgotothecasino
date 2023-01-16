@@ -82,7 +82,10 @@ impl Store {
         let redis_keys: Vec<String> = keys.iter().map(|k| format!("unlock_{}", k)).collect();
         Ok(match &redis_keys[..] {
             [] => vec![],
-            [only] => conn.get(only).await?,
+            [only] => {
+                let item: UnhydratedUnlock = conn.get(only).await?;
+                vec![item]
+            },
             _ => conn.get(redis_keys).await?,
         })
     }
