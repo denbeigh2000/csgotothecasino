@@ -5,7 +5,7 @@ window.createTimeseriesChart = (data) => {
   data.forEach((d) => groups.add(d.name));
   for (k of groups.keys()) {
     grouped[k] = zip(
-      data.map((d) => new Date(d.at)),
+      data.filter((d) => d.name === k).map((d) => new Date(d.at)),
       sum_over_time(data.filter((d) => d.name === k).map(value_estimator))
     ).map(([date, n]) => ({ x: date, y: n }));
   }
