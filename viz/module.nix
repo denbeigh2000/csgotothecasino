@@ -56,6 +56,30 @@ in
         ];
 
         locations = {
+          "/api/stream" = {
+            proxyPass = "http://${cfg.backend}";
+            extraConfig = ''
+              rewrite ^/api/(.*) /$1 break;
+              proxy_http_version 1.1;
+
+              proxy_set_header Upgrade $http_upgrade;
+              proxy_set_header Connection "Upgrade";
+              proxy_set_header Host $host;
+            '';
+          };
+
+          "/api/sync" = {
+            proxyPass = "http://${cfg.backend}";
+            extraConfig = ''
+              rewrite ^/api/(.*) /$1 break;
+              proxy_http_version 1.1;
+
+              proxy_set_header Upgrade $http_upgrade;
+              proxy_set_header Connection "Upgrade";
+              proxy_set_header Host $host;
+            '';
+          };
+
           "/api" = {
             proxyPass = "http://${cfg.backend}";
             extraConfig = ''
