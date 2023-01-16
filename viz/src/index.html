@@ -114,9 +114,7 @@
           }, 15 * 1000);
         });
         socket.addEventListener("message", async (e) => {
-          const server_text = await e.data.text();
-          console.warn(server_text);
-          const parsed = JSON.parse(server_text);
+          const parsed = JSON.parse(e.data);
           if (update && (!filtered || filtered === parsed.name))
             update(chart, {
               ...parsed,
