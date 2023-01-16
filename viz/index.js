@@ -14,16 +14,14 @@ const ENV = process.env.ENV || "prod";
 const PORT = 7007;
 const HOST = "localhost";
 const ENVS = {
-    prod: {
-        API_SERVICE_URL: "https://casino.denb.ee",
-        WS_SERVICE_URL: "wss://casino.denb.ee",
-        SERVICE_URL_PREFIX: "api/",
-    },
-    dev: {
-        API_SERVICE_URL: "http://127.0.0.1:7000",
-        WS_SERVICE_URL: "ws://127.0.0.1:7000",
-        SERVICE_URL_PREFIX: "",
-    }
+  prod: {
+    API_SERVICE_URL: "https://casino.denb.ee/api",
+    WS_SERVICE_URL: "wss://casino.denb.ee/api",
+  },
+  dev: {
+    API_SERVICE_URL: "http://127.0.0.1:7000",
+    WS_SERVICE_URL: "ws://127.0.0.1:7000",
+  }
 }
 const { API_SERVICE_URL, WS_SERVICE_URL, SERVICE_URL_PREFIX } = ENVS[ENV];
 
@@ -36,27 +34,27 @@ const proxy = createProxyMiddleware({
   changeOrigin: true,
 });
 
-const wsProxy = createProxyMiddleware(`/${SERVICE_URL_PREFIX}stream`, {
+const wsProxy = createProxyMiddleware(`/stream`, {
   target: WS_SERVICE_URL,
   changeOrigin: true,
   logLevel: "debug",
   ws: true,
 });
 
-const wsSyncProxy = createProxyMiddleware(`/${SERVICE_URL_PREFIX}sync`, {
+const wsSyncProxy = createProxyMiddleware(`/sync`, {
   target: WS_SERVICE_URL,
   changeOrigin: true,
   logLevel: "debug",
   ws: true,
 });
 
-app.use(`/${SERVICE_URL_PREFIX}stream`, wsProxy);
-app.use(`/${SERVICE_URL_PREFIX}sync`, wsSyncProxy);
+app.use(`/stream`, wsProxy);
+app.use(`/sync`, wsSyncProxy);
 
 app.use("/viz", express.static("src"));
-app.use(`/${SERVICE_URL_PREFIX}`, proxy);
+app.use(`/`, proxy);
 
-open(`http://${HOST}:${PORT}/viz/index.html`);
+// open(`http://${HOST}:${PORT}/viz/index.html`);
 
 // Start the Proxy
 app
