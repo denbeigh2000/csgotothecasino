@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use reqwest::header::AUTHORIZATION;
+use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
 use reqwest::{Client, IntoUrl, Url};
 use tokio::time::interval;
 
@@ -102,6 +102,7 @@ impl Collector {
             .post(self.collection_url.as_ref())
             .body(data)
             .header(AUTHORIZATION, &self.auth_header)
+            .header(CONTENT_TYPE, "application/json")
             .send()
             .await?
             .error_for_status()?;
