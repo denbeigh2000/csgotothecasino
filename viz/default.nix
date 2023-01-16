@@ -9,9 +9,8 @@ stdenv.mkDerivation {
   installPhase = ''
     mkdir -p $out/share/www
 
-    cp src/index.html \
-      src/utils.js \
-      src/websocket_test.js \
+    cp src/*.html \
+      src/*.js \
       $out/share/www/
 
     cp -r src/views $out/share/www/views
